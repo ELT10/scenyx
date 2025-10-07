@@ -387,17 +387,15 @@ export default function Home() {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-12 mt-8"
+          className="text-center mb-10"
         >
-          <GlitchText className="text-6xl font-black mb-4">
+          {/* <GlitchText className="text-4xl font-black mb-4">
             SCENYX
-          </GlitchText>
+          </GlitchText> */}
           <div className="flex items-center justify-center gap-2 text-sm uppercase tracking-[0.3em]">
             <span className="text-[var(--accent-cyan)]">AI POWERED</span>
             <span className="text-[var(--text-muted)]">//</span>
             <span className="text-[var(--text-primary)]">VIDEO GENERATION PLATFORM</span>
-            <span className="text-[var(--text-muted)]">//</span>
-            <span className="text-[var(--accent-cyan)]">NEXT GEN</span>
           </div>
         </motion.div>
 

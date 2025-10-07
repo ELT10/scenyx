@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import DeviceDetector from "@/components/DeviceDetector";
 
 export const metadata: Metadata = {
   title: "SCENYX // AI VIDEO GENERATION PLATFORM",
@@ -23,7 +24,7 @@ export default function RootLayout({
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-2">
               <span className="status-dot active"></span>
-              <span>SYS:ONLINE</span>
+              <span>SCENYX</span>
             </span>
             <span className="text-[var(--text-muted)]">|</span>
             <span className="text-[var(--accent-cyan)]">AI STUDIO</span>
@@ -33,8 +34,8 @@ export default function RootLayout({
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[var(--text-muted)]">PLATFORM:</span>
-            <span className="text-[var(--text-primary)]">SCENYX</span>
+            <span className="text-[var(--text-muted)]">DEVICE:</span>
+            <DeviceDetector />
           </div>
         </div>
 
@@ -49,7 +50,7 @@ export default function RootLayout({
             SCENYX AI VIDEO GENERATION PLATFORM v1.0.0
           </span>
           <span className="text-[var(--text-muted)]">
-            POWERED BY AI // NEXT GENERATION
+            POWERED BY SORA2
           </span>
         </div>
       </body>
