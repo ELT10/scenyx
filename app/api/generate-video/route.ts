@@ -15,7 +15,7 @@ interface VideoResponse {
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, pollForCompletion } = await request.json();
+    const { prompt, pollForCompletion, model = 'sora-2-pro', seconds = '12', orientation = 'horizontal', resolution = 'standard' } = await request.json();
 
     if (!prompt) {
       return NextResponse.json(
@@ -33,7 +33,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('Starting video generation with prompt:', prompt);
+    // Determine size based on orientation and resolution
+    // sora-2-pro supports higher resolutions: 1792x1024 (landscape) and 1024x1792 (portrait)
+    // sora-2 only supports: 1280x720 (landscape) and 720x1280 (portrait)
+    let size: string;
+    if (model === 'sora-2-pro' && resolution === 'high') {
+      size = orientation === 'vertical' ? '1024x1792' : '1792x1024';
+    } else {
+      size = orientation === 'vertical' ? '720x1280' : '1280x720';
+    }
+    
+    console.log('Starting video generation with prompt:', prompt, 'model:', model, 'seconds:', seconds, 'size:', size, 'orientation:', orientation);
 
     // Step 1: Create video generation request
     const createResponse = await fetch(`${OPENAI_API_BASE}/videos`, {
@@ -43,10 +53,10 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'sora-2-pro',
+        model: model,
         prompt: prompt,
-        seconds: "12",
-        size: "1280x720"
+        seconds: seconds,
+        size: size
       }),
     });
 

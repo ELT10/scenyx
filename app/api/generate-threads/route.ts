@@ -8,7 +8,7 @@ const QUALITY_MODEL_MAP: Record<string, string> = {
 
 export async function POST(request: NextRequest) {
   try {
-    const { companyName, companyType, product, quality = 'mini' } = await request.json();
+    const { companyName, companyType, product, quality = 'mini', orientation = 'horizontal' } = await request.json();
 
     if (!companyName || !companyType) {
       return NextResponse.json(
@@ -28,18 +28,26 @@ export async function POST(request: NextRequest) {
 
     // Get the model based on quality level
     const model = QUALITY_MODEL_MAP[quality] || QUALITY_MODEL_MAP['mini'];
+    
+    // Determine video dimensions based on orientation
+    const videoDimensions = orientation === 'vertical' ? '720x1280 (Portrait)' : '1280x720 (Landscape)';
+    const formatContext = orientation === 'vertical' 
+      ? 'mobile-first portrait video suitable for social media platforms like Instagram Stories, TikTok, and YouTube Shorts'
+      : 'traditional landscape video suitable for YouTube, TV, and desktop viewing';
 
-    console.log('Generating threads for:', { companyName, companyType, product, quality, model });
+    console.log('Generating threads for:', { companyName, companyType, product, quality, model, orientation });
 
-    const prompt = `You are a creative advertising strategist. Generate 4 unique and compelling creative threads/concepts for a 12-second video advertisement.
+    const prompt = `You are a creative advertising strategist. Generate 4 unique and compelling creative threads/concepts for a 12-second ${orientation} video advertisement.
 
 Company: ${companyName}
 Type: ${companyType}${product ? `\nProduct Details: ${product}` : ''}
+Video Format: ${videoDimensions} - ${formatContext}
 
 Each thread should:
 - Be concise (1-2 sentences)
 - Focus on a unique emotional or narrative angle
-- Be suitable for a short, impactful video ad
+- Be suitable for a short, impactful ${orientation} video ad (${videoDimensions})
+- Be optimized for ${formatContext}
 - Appeal to the target audience
 
 Format your response as a JSON array with 4 objects, each having:

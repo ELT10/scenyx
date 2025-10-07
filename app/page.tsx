@@ -44,6 +44,10 @@ export default function Home() {
   const [generatedVideoId, setGeneratedVideoId] = useState<string | null>(null);
   const [generationProgress, setGenerationProgress] = useState<number>(0);
   const [generationStatus, setGenerationStatus] = useState<string>('');
+  const [videoQuality, setVideoQuality] = useState<'sora-2' | 'sora-2-pro'>('sora-2');
+  const [videoDuration, setVideoDuration] = useState<'4' | '8' | '12'>('12');
+  const [videoOrientation, setVideoOrientation] = useState<'vertical' | 'horizontal'>('horizontal');
+  const [videoResolution, setVideoResolution] = useState<'standard' | 'high'>('standard');
   const generationPollingRef = useRef<NodeJS.Timeout | null>(null);
   
   // Video status check state
@@ -64,6 +68,7 @@ export default function Home() {
   const [productDescription, setProductDescription] = useState('');
   const [customThread, setCustomThread] = useState('');
   const [scriptQuality, setScriptQuality] = useState<'nano' | 'mini' | 'high'>('mini');
+  const [orientation, setOrientation] = useState<'vertical' | 'horizontal'>('horizontal');
   const [threads, setThreads] = useState<Thread[]>([]);
   const [selectedThread, setSelectedThread] = useState<Thread | null>(null);
   const [generatedScript, setGeneratedScript] = useState('');
@@ -156,7 +161,14 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ prompt, pollForCompletion: false }),
+        body: JSON.stringify({ 
+          prompt, 
+          pollForCompletion: false,
+          model: videoQuality,
+          seconds: videoDuration,
+          orientation: videoOrientation,
+          resolution: videoResolution,
+        }),
       });
 
       const data = await response.json();
@@ -307,6 +319,7 @@ export default function Home() {
           companyType,
           product: productDescription,
           quality: scriptQuality,
+          orientation,
         }),
       });
 
@@ -343,6 +356,7 @@ export default function Home() {
           product: productDescription,
           thread: threadText,
           quality: scriptQuality,
+          orientation,
         }),
       });
 
@@ -459,6 +473,7 @@ export default function Home() {
                         disabled={loadingThreads || loadingScript}
                       />
 
+                <DataGrid columns={2} gap="md">
                     <div>
                   <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
                     {'>'} GENERATION QUALITY LEVEL
@@ -474,6 +489,22 @@ export default function Home() {
                     <option value="high">[ PREMIUM ] GPT-5</option>
                       </select>
                     </div>
+
+                    <div>
+                      <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
+                        {'>'} VIDEO ORIENTATION
+                      </label>
+                      <select
+                        value={orientation}
+                        onChange={(e) => setOrientation(e.target.value as 'vertical' | 'horizontal')}
+                        disabled={loadingThreads || loadingScript}
+                        className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
+                      >
+                        <option value="horizontal">[ HORIZONTAL ] 1280x720</option>
+                        <option value="vertical">[ VERTICAL ] 720x1280</option>
+                      </select>
+                    </div>
+                </DataGrid>
 
                 <TerminalInput
                   label="CUSTOM THREAD (OPTIONAL)"
@@ -597,6 +628,73 @@ export default function Home() {
           >
             <TerminalPanel title="VIDEO GENERATION INTERFACE" status="active">
               <div className="space-y-6">
+                <div className="space-y-4">
+                  <DataGrid columns={2} gap="md">
+                    <div>
+                      <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
+                        {'>'} VIDEO QUALITY MODEL
+                      </label>
+                      <select
+                        value={videoQuality}
+                        onChange={(e) => setVideoQuality(e.target.value as 'sora-2' | 'sora-2-pro')}
+                        disabled={loading}
+                        className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
+                      >
+                        <option value="sora-2">[ STANDARD ] SORA-2</option>
+                        <option value="sora-2-pro">[ PREMIUM ] SORA-2-PRO</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
+                        {'>'} VIDEO DURATION
+                      </label>
+                      <select
+                        value={videoDuration}
+                        onChange={(e) => setVideoDuration(e.target.value as '4' | '8' | '12')}
+                        disabled={loading}
+                        className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
+                      >
+                        <option value="4">[ SHORT ] 4 SECONDS</option>
+                        <option value="8">[ MEDIUM ] 8 SECONDS</option>
+                        <option value="12">[ LONG ] 12 SECONDS</option>
+                      </select>
+                    </div>
+                  </DataGrid>
+
+                  <div>
+                    <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
+                      {'>'} VIDEO ORIENTATION
+                    </label>
+                    <select
+                      value={videoOrientation}
+                      onChange={(e) => setVideoOrientation(e.target.value as 'vertical' | 'horizontal')}
+                      disabled={loading}
+                      className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
+                    >
+                      <option value="horizontal">[ HORIZONTAL ] Landscape</option>
+                      <option value="vertical">[ VERTICAL ] Portrait</option>
+                    </select>
+                  </div>
+                </div>
+
+                {videoQuality === 'sora-2-pro' && (
+                  <div>
+                    <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
+                      {'>'} VIDEO RESOLUTION (PRO ONLY)
+                    </label>
+                    <select
+                      value={videoResolution}
+                      onChange={(e) => setVideoResolution(e.target.value as 'standard' | 'high')}
+                      disabled={loading}
+                      className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
+                    >
+                      <option value="standard">[ STANDARD ] {videoOrientation === 'vertical' ? '720x1280' : '1280x720'}</option>
+                      <option value="high">[ HIGH ] {videoOrientation === 'vertical' ? '1024x1792' : '1792x1024'}</option>
+                    </select>
+                  </div>
+                )}
+
                 <TerminalInput
                   label="VIDEO GENERATION PROMPT"
                   placeholder="Enter detailed video description..."
