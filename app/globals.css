@@ -1,0 +1,606 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  --bg-primary: #000000;
+  --bg-secondary: #0a0a0a;
+  --bg-tertiary: #111111;
+  --text-primary: #e0e0e0;
+  --text-secondary: #ffffff;
+  --text-muted: #666666;
+  --border-primary: #888888;
+  --border-dim: #333333;
+  --accent-cyan: #00d4ff;
+  --accent-red: #ff3333;
+  --accent-amber: #ffa500;
+  --glow-primary: rgba(255, 255, 255, 0.5);
+  --glow-cyan: rgba(0, 212, 255, 0.5);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'IBM Plex Mono', 'Courier New', monospace;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Animated grid background */
+.grid-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: 0;
+  animation: grid-move 20s linear infinite;
+}
+
+@keyframes grid-move {
+  0% {
+    transform: translate(0, 0);
+  }
+  100% {
+    transform: translate(50px, 50px);
+  }
+}
+
+/* Scan line effect */
+.scan-line {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(255, 255, 255, 0.02) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 9999;
+  animation: scan 8s linear infinite;
+}
+
+@keyframes scan {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+/* Glitch effect */
+@keyframes glitch {
+  0%, 100% {
+    text-shadow: 
+      -2px 0 var(--accent-red),
+      2px 0 var(--accent-cyan);
+  }
+  25% {
+    text-shadow: 
+      2px 0 var(--accent-red),
+      -2px 0 var(--accent-cyan);
+  }
+  50% {
+    text-shadow: 
+      -2px 0 var(--accent-cyan),
+      2px 0 var(--accent-red);
+  }
+  75% {
+    text-shadow: 
+      2px 0 var(--accent-cyan),
+      -2px 0 var(--accent-red);
+  }
+}
+
+.glitch {
+  animation: glitch 0.3s ease-in-out infinite alternate;
+}
+
+/* Glowing text effect */
+.glow-text {
+  text-shadow: 
+    0 0 5px var(--glow-primary),
+    0 0 10px var(--glow-primary),
+    0 0 20px var(--glow-primary);
+}
+
+.glow-text-cyan {
+  text-shadow: 
+    0 0 5px var(--glow-cyan),
+    0 0 10px var(--glow-cyan),
+    0 0 20px var(--glow-cyan);
+}
+
+/* Terminal panel */
+.terminal-panel {
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid var(--border-primary);
+  box-shadow: 
+    0 0 20px rgba(255, 255, 255, 0.1),
+    inset 0 0 20px rgba(255, 255, 255, 0.03);
+  position: relative;
+}
+
+.terminal-panel::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  bottom: -1px;
+  background: linear-gradient(45deg, 
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%);
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.terminal-panel:hover::before {
+  opacity: 1;
+}
+
+/* Corner brackets */
+.corner-brackets {
+  position: relative;
+}
+
+.corner-brackets::before,
+.corner-brackets::after {
+  content: '';
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--border-primary);
+}
+
+.corner-brackets::before {
+  top: -2px;
+  left: -2px;
+  border-right: none;
+  border-bottom: none;
+}
+
+.corner-brackets::after {
+  top: -2px;
+  right: -2px;
+  border-left: none;
+  border-bottom: none;
+}
+
+.corner-brackets .corner-bottom-left,
+.corner-brackets .corner-bottom-right {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--border-primary);
+}
+
+.corner-brackets .corner-bottom-left {
+  bottom: -2px;
+  left: -2px;
+  border-right: none;
+  border-top: none;
+}
+
+.corner-brackets .corner-bottom-right {
+  bottom: -2px;
+  right: -2px;
+  border-left: none;
+  border-top: none;
+}
+
+/* Pulsing glow effect */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 
+      0 0 5px rgba(255, 255, 255, 0.3),
+      0 0 10px rgba(255, 255, 255, 0.2),
+      inset 0 0 10px rgba(255, 255, 255, 0.1);
+  }
+  50% {
+    box-shadow: 
+      0 0 10px rgba(255, 255, 255, 0.5),
+      0 0 20px rgba(255, 255, 255, 0.3),
+      inset 0 0 20px rgba(255, 255, 255, 0.2);
+  }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Status indicators */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+  animation: blink 1.5s ease-in-out infinite;
+}
+
+.status-dot.active {
+  background-color: var(--text-primary);
+  box-shadow: 0 0 10px var(--glow-primary);
+}
+
+.status-dot.warning {
+  background-color: var(--accent-amber);
+  box-shadow: 0 0 10px rgba(255, 170, 0, 0.5);
+}
+
+.status-dot.error {
+  background-color: var(--accent-red);
+  box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+}
+
+@keyframes blink {
+  0%, 50%, 100% {
+    opacity: 1;
+  }
+  25%, 75% {
+    opacity: 0.3;
+  }
+}
+
+/* Loading bar */
+.loading-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-dim);
+  position: relative;
+  overflow: hidden;
+}
+
+.loading-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 30%;
+  background: linear-gradient(90deg, 
+    transparent 0%,
+    var(--text-secondary) 50%,
+    transparent 100%);
+  animation: loading 1.5s ease-in-out infinite;
+}
+
+@keyframes loading {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+/* Data stream effect */
+@keyframes data-stream {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh);
+    opacity: 0;
+  }
+}
+
+/* Button styles */
+.btn-primary {
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  padding: 12px 24px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    transparent 0%,
+    rgba(255, 255, 255, 0.2) 50%,
+    transparent 100%);
+  transition: left 0.5s ease;
+}
+
+.btn-primary:hover::before {
+  left: 100%;
+}
+
+.btn-primary:hover {
+  box-shadow: 
+    0 0 10px rgba(255, 255, 255, 0.5),
+    inset 0 0 10px rgba(255, 255, 255, 0.2);
+  border-color: var(--text-secondary);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-primary:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  border-color: var(--border-dim);
+}
+
+.btn-primary:disabled:hover {
+  box-shadow: none;
+}
+
+/* Input styles */
+input[type="text"],
+input[type="password"],
+textarea,
+select {
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--border-dim);
+  color: var(--text-primary);
+  padding: 10px 15px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--border-primary);
+  box-shadow: 
+    0 0 10px rgba(255, 255, 255, 0.3),
+    inset 0 0 5px rgba(255, 255, 255, 0.1);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-dim);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border: 1px solid var(--border-dim);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+  box-shadow: 0 0 5px var(--glow-primary);
+}
+
+/* Hexagonal wireframe effect */
+.hex-pattern {
+  background-image: 
+    repeating-linear-gradient(0deg, 
+      rgba(255, 255, 255, 0.05) 0px, 
+      transparent 1px, 
+      transparent 40px, 
+      rgba(255, 255, 255, 0.05) 41px),
+    repeating-linear-gradient(60deg, 
+      rgba(255, 255, 255, 0.05) 0px, 
+      transparent 1px, 
+      transparent 40px, 
+      rgba(255, 255, 255, 0.05) 41px),
+    repeating-linear-gradient(120deg, 
+      rgba(255, 255, 255, 0.05) 0px, 
+      transparent 1px, 
+      transparent 40px, 
+      rgba(255, 255, 255, 0.05) 41px);
+}
+
+/* Orbitron font for headers */
+.font-orbitron {
+  font-family: 'Orbitron', sans-serif;
+}
+
+/* Typography utilities */
+.text-neon-green {
+  color: var(--text-primary);
+}
+
+.text-neon-cyan {
+  color: var(--accent-cyan);
+}
+
+.text-neon-red {
+  color: var(--accent-red);
+}
+
+.border-neon-green {
+  border-color: var(--border-primary);
+}
+
+.border-neon-dim {
+  border-color: var(--border-dim);
+}
+
+/* Typing animation */
+@keyframes typing {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes blink-caret {
+  from, to {
+    border-color: transparent;
+  }
+  50% {
+    border-color: var(--text-primary);
+  }
+}
+
+/* Matrix rain effect particles */
+.matrix-rain {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.matrix-rain span {
+  position: absolute;
+  top: -100px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  opacity: 0.3;
+  animation: data-stream linear infinite;
+}
+
+/* Video player enhancements */
+video {
+  border: 1px solid var(--border-primary);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+}
+
+/* Progress bars */
+.progress-bar {
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--border-dim);
+  height: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-fill {
+  background: linear-gradient(90deg,
+    var(--text-muted) 0%,
+    var(--text-primary) 50%,
+    var(--text-secondary) 100%);
+  height: 100%;
+  transition: width 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%);
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Tab styles */
+.tab-button {
+  background: transparent;
+  border: 1px solid var(--border-dim);
+  color: var(--text-muted);
+  padding: 12px 24px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.tab-button.active {
+  border-color: var(--border-primary);
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 
+    0 0 10px rgba(255, 255, 255, 0.3),
+    inset 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+.tab-button:not(.active):hover {
+  border-color: var(--text-secondary);
+  color: var(--text-secondary);
+}
+
+/* Noise texture overlay */
+.noise-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.03;
+  z-index: 9998;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
