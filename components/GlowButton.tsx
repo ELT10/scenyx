@@ -1,9 +1,9 @@
 'use client';
 
-import { ReactNode, ButtonHTMLAttributes } from 'react';
-import { motion } from 'framer-motion';
+import { ReactNode } from 'react';
+import { motion, HTMLMotionProps } from 'framer-motion';
 
-interface GlowButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface GlowButtonProps extends Omit<HTMLMotionProps<'button'>, 'children'> {
   children: ReactNode;
   variant?: 'primary' | 'danger' | 'warning';
   loading?: boolean;
