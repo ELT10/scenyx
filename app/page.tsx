@@ -35,7 +35,7 @@ interface Thread {
 export default function Home() {
   // Tab state
   const [activeTab, setActiveTab] = useState<'generate' | 'view' | 'script'>('generate');
-  
+
   // Generate video state
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
@@ -49,7 +49,7 @@ export default function Home() {
   const [videoOrientation, setVideoOrientation] = useState<'vertical' | 'horizontal'>('horizontal');
   const [videoResolution, setVideoResolution] = useState<'standard' | 'high'>('standard');
   const generationPollingRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Video status check state
   const [videoId, setVideoId] = useState('');
   const [checkingStatus, setCheckingStatus] = useState(false);
@@ -57,7 +57,7 @@ export default function Home() {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [autoPolling, setAutoPolling] = useState(false);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // View videos state
   const [savedVideos, setSavedVideos] = useState<VideoStatus[]>([]);
   const [loadingVideos, setLoadingVideos] = useState(false);
@@ -69,6 +69,7 @@ export default function Home() {
   const [customThread, setCustomThread] = useState('');
   const [scriptQuality, setScriptQuality] = useState<'nano' | 'mini' | 'high'>('mini');
   const [orientation, setOrientation] = useState<'vertical' | 'horizontal'>('horizontal');
+  const [scriptDuration, setScriptDuration] = useState<'4' | '8' | '12'>('12');
   const [threads, setThreads] = useState<Thread[]>([]);
   const [selectedThread, setSelectedThread] = useState<Thread | null>(null);
   const [generatedScript, setGeneratedScript] = useState('');
@@ -92,7 +93,7 @@ export default function Home() {
     }
   };
 
-  const getVideoIdsFromLocalStorage = (): Array<{video_id: string; prompt: string; saved_at: number}> => {
+  const getVideoIdsFromLocalStorage = (): Array<{ video_id: string; prompt: string; saved_at: number }> => {
     try {
       return JSON.parse(localStorage.getItem('sora_video_ids') || '[]');
     } catch (error) {
@@ -116,7 +117,7 @@ export default function Home() {
         setVideoUrl(data.video_data);
         setLoading(false);
         setGenerationProgress(100);
-        
+
         if (generationPollingRef.current) {
           clearInterval(generationPollingRef.current);
           generationPollingRef.current = null;
@@ -124,7 +125,7 @@ export default function Home() {
       } else if (data.status === 'failed') {
         setError('Video generation failed');
         setLoading(false);
-        
+
         if (generationPollingRef.current) {
           clearInterval(generationPollingRef.current);
           generationPollingRef.current = null;
@@ -134,7 +135,7 @@ export default function Home() {
       console.error('Error polling progress:', err);
       setError(err.message || 'Failed to check video progress');
       setLoading(false);
-      
+
       if (generationPollingRef.current) {
         clearInterval(generationPollingRef.current);
         generationPollingRef.current = null;
@@ -161,8 +162,8 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          prompt, 
+        body: JSON.stringify({
+          prompt,
           pollForCompletion: false,
           model: videoQuality,
           seconds: videoDuration,
@@ -178,18 +179,18 @@ export default function Home() {
       }
 
       setGeneratedVideoId(data.video_id);
-      
+
       if (data.video_id) {
         saveVideoIdToLocalStorage(data.video_id, prompt);
       }
 
       const savedPrompt = prompt;
       pollGenerationProgress(data.video_id, savedPrompt);
-      
+
       generationPollingRef.current = setInterval(() => {
         pollGenerationProgress(data.video_id, savedPrompt);
       }, 6000);
-      
+
     } catch (err: any) {
       setError(err.message || 'An error occurred while generating the video');
       setLoading(false);
@@ -320,6 +321,7 @@ export default function Home() {
           product: productDescription,
           quality: scriptQuality,
           orientation,
+          duration: scriptDuration,
         }),
       });
 
@@ -357,6 +359,7 @@ export default function Home() {
           thread: threadText,
           quality: scriptQuality,
           orientation,
+          duration: scriptDuration,
         }),
       });
 
@@ -390,14 +393,17 @@ export default function Home() {
   const generateVideoFromScript = () => {
     setActiveTab('generate');
     setPrompt(generatedScript);
+    // Transfer orientation and duration settings from script to video generation
+    setVideoOrientation(orientation);
+    setVideoDuration(scriptDuration);
   };
 
   return (
     <div className="min-h-screen relative pb-20">
       <BackgroundEffects />
-      
+
       <div className="relative z-10 container mx-auto px-4 py-8 max-w-7xl">
-          {/* Header */}
+        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -413,29 +419,29 @@ export default function Home() {
           </div>
         </motion.div>
 
-          {/* Tabs */}
+        {/* Tabs */}
         <div className="flex gap-2 mb-8 justify-center">
-              <button
-                onClick={() => setActiveTab('script')}
+          <button
+            onClick={() => setActiveTab('script')}
             className={`tab-button ${activeTab === 'script' ? 'active' : ''}`}
           >
             [ SCRIPT GEN ]
-              </button>
-              <button
-                onClick={() => setActiveTab('generate')}
+          </button>
+          <button
+            onClick={() => setActiveTab('generate')}
             className={`tab-button ${activeTab === 'generate' ? 'active' : ''}`}
           >
             [ VIDEO GEN ]
-              </button>
-              <button
-                onClick={() => setActiveTab('view')}
+          </button>
+          <button
+            onClick={() => setActiveTab('view')}
             className={`tab-button ${activeTab === 'view' ? 'active' : ''}`}
           >
             [ ARCHIVE ]
-              </button>
-            </div>
+          </button>
+        </div>
 
-            {/* Tab Content */}
+        {/* Tab Content */}
         {activeTab === 'script' && (
           <motion.div
             key="script"
@@ -449,18 +455,18 @@ export default function Home() {
                   <TerminalInput
                     label="COMPANY/PRODUCT NAME"
                     placeholder="Enter company or product name..."
-                        value={companyName}
-                        onChange={(e) => setCompanyName(e.target.value)}
-                        disabled={loadingThreads || loadingScript}
-                      />
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    disabled={loadingThreads || loadingScript}
+                  />
 
                   <TerminalInput
                     label="PRODUCT/COMPANY TYPE"
                     placeholder="Enter product or company type..."
-                        value={companyType}
-                        onChange={(e) => setCompanyType(e.target.value)}
-                        disabled={loadingThreads || loadingScript}
-                      />
+                    value={companyType}
+                    onChange={(e) => setCompanyType(e.target.value)}
+                    disabled={loadingThreads || loadingScript}
+                  />
                 </DataGrid>
 
                 <TerminalInput
@@ -468,58 +474,76 @@ export default function Home() {
                   placeholder="Enter detailed product description..."
                   multiline
                   rows={3}
-                        value={productDescription}
-                        onChange={(e) => setProductDescription(e.target.value)}
-                        disabled={loadingThreads || loadingScript}
-                      />
+                  value={productDescription}
+                  onChange={(e) => setProductDescription(e.target.value)}
+                  disabled={loadingThreads || loadingScript}
+                />
 
-                <DataGrid columns={2} gap="md">
+                <div className="space-y-4">
+                  <DataGrid columns={2} gap="md">
                     <div>
-                  <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
-                    {'>'} GENERATION QUALITY LEVEL
+                      <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
+                        {'>'} GENERATION QUALITY LEVEL
                       </label>
                       <select
                         value={scriptQuality}
                         onChange={(e) => setScriptQuality(e.target.value as 'nano' | 'mini' | 'high')}
                         disabled={loadingThreads || loadingScript}
-                    className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
-                  >
-                    <option value="nano">[ FAST ] GPT-5 NANO</option>
-                    <option value="mini">[ BALANCED ] GPT-5 MINI</option>
-                    <option value="high">[ PREMIUM ] GPT-5</option>
+                        className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
+                      >
+                        <option value="nano">[ FAST ] GPT-5 NANO</option>
+                        <option value="mini">[ BALANCED ] GPT-5 MINI</option>
+                        <option value="high">[ PREMIUM ] GPT-5</option>
                       </select>
                     </div>
 
                     <div>
                       <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
-                        {'>'} VIDEO ORIENTATION
+                        {'>'} VIDEO DURATION
                       </label>
                       <select
-                        value={orientation}
-                        onChange={(e) => setOrientation(e.target.value as 'vertical' | 'horizontal')}
+                        value={scriptDuration}
+                        onChange={(e) => setScriptDuration(e.target.value as '4' | '8' | '12')}
                         disabled={loadingThreads || loadingScript}
                         className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
                       >
-                        <option value="horizontal">[ HORIZONTAL ] 1280x720</option>
-                        <option value="vertical">[ VERTICAL ] 720x1280</option>
+                        <option value="4">[ SHORT ] 4 SECONDS</option>
+                        <option value="8">[ MEDIUM ] 8 SECONDS</option>
+                        <option value="12">[ LONG ] 12 SECONDS</option>
                       </select>
                     </div>
-                </DataGrid>
+                  </DataGrid>
+
+                  <div>
+                    <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
+                      {'>'} VIDEO ORIENTATION
+                    </label>
+                    <select
+                      value={orientation}
+                      onChange={(e) => setOrientation(e.target.value as 'vertical' | 'horizontal')}
+                      disabled={loadingThreads || loadingScript}
+                      className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
+                    >
+                      <option value="horizontal">[ HORIZONTAL ] 1280x720</option>
+                      <option value="vertical">[ VERTICAL ] 720x1280</option>
+                    </select>
+                  </div>
+                </div>
 
                 <TerminalInput
                   label="CUSTOM THREAD (OPTIONAL)"
                   placeholder="Enter custom narrative thread..."
                   multiline
                   rows={2}
-                        value={customThread}
-                        onChange={(e) => setCustomThread(e.target.value)}
-                        disabled={loadingThreads || loadingScript}
-                      />
+                  value={customThread}
+                  onChange={(e) => setCustomThread(e.target.value)}
+                  disabled={loadingThreads || loadingScript}
+                />
 
                 <div className="flex gap-3">
-                    {!customThread.trim() ? (
+                  {!customThread.trim() ? (
                     <GlowButton
-                        onClick={generateThreads}
+                      onClick={generateThreads}
                       disabled={loadingThreads || !companyName.trim() || !companyType.trim()}
                       loading={loadingThreads}
                       className="flex-1"
@@ -528,92 +552,92 @@ export default function Home() {
                     </GlowButton>
                   ) : (
                     <GlowButton
-                        onClick={handleCustomThreadSubmit}
+                      onClick={handleCustomThreadSubmit}
                       disabled={loadingScript || !companyName.trim() || !companyType.trim()}
                       loading={loadingScript}
                       className="flex-1"
                     >
                       {loadingScript ? 'PROCESSING...' : '[ GENERATE SCRIPT ]'}
                     </GlowButton>
-                    )}
-                  </div>
+                  )}
+                </div>
 
-                  {scriptError && (
+                {scriptError && (
                   <div className="border border-[var(--accent-red)] bg-[var(--accent-red)] bg-opacity-10 p-4">
                     <div className="flex items-start gap-3">
-                      <span className="text-[var(--accent-red)] text-xl">⚠</span>
-                        <div>
-                        <div className="text-[var(--accent-red)] font-bold text-sm uppercase mb-1">ERROR</div>
-                        <div className="text-[var(--accent-red)] text-xs">{scriptError}</div>
-                        </div>
+                      <span className="text-[#000] text-xl">⚠</span>
+                      <div>
+                        <div className="text-[#000] font-bold text-sm uppercase mb-1">ERROR</div>
+                        <div className="text-[#000] text-xs">{scriptError}</div>
                       </div>
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {threads.length > 0 && !customThread && (
+                {threads.length > 0 && !customThread && (
                   <div>
                     <h3 className="text-sm uppercase tracking-widest text-[var(--text-primary)] mb-4 font-mono">
                       {'>'} SELECT THREAD CONCEPT
-                      </h3>
+                    </h3>
                     <DataGrid columns={2} gap="md">
-                        {threads.map((thread) => (
-                          <button
-                            key={thread.id}
-                            onClick={() => handleThreadSelect(thread)}
-                            disabled={loadingScript}
+                      {threads.map((thread) => (
+                        <button
+                          key={thread.id}
+                          onClick={() => handleThreadSelect(thread)}
+                          disabled={loadingScript}
                           className={`
                             p-4 border text-left transition-all
                             ${selectedThread?.id === thread.id
-                              ? 'border-[var(--border-primary)] bg-[var(--text-primary)] bg-opacity-5'
-                              : 'border-[var(--border-dim)] hover:border-[var(--text-secondary)]'
+                              ? 'border-[var(--border-primary)] bg-[var(--text-primary)] bg-opacity-5 '
+                              : 'border-[var(--border-dim)] hover:border-[var(--text-secondary)] '
                             }
                             disabled:opacity-30 disabled:cursor-not-allowed
                           `}
                         >
-                          <h4 className="font-bold text-[var(--text-primary)] text-sm mb-2 uppercase tracking-wide">
-                              {thread.title}
-                            </h4>
+                          <h4 className={`font-bold text-sm mb-2 uppercase tracking-wide ${selectedThread?.id === thread.id ? 'text-[#000000]' : 'text-[var(--text-primary)]'}`}>
+                            {thread.title}
+                          </h4>
                           <p className="text-[var(--text-muted)] text-xs leading-relaxed">
-                              {thread.description}
-                            </p>
-                          </button>
-                        ))}
+                            {thread.description}
+                          </p>
+                        </button>
+                      ))}
                     </DataGrid>
-                    </div>
-                  )}
+                  </div>
+                )}
 
-                  {loadingScript && (
+                {loadingScript && (
                   <div className="border border-[var(--accent-cyan)] bg-[var(--accent-cyan)] bg-opacity-5 p-4">
                     <div className="flex items-center gap-3">
                       <div className="loading-bar w-full"></div>
                     </div>
                     <div className="text-[var(--accent-cyan)] text-xs uppercase mt-2 tracking-wider">
                       PROCESSING SCRIPT GENERATION...
-                      </div>
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {generatedScript && (
+                {generatedScript && (
                   <div>
-                      <div className="flex justify-between items-center mb-4">
+                    <div className="flex justify-between items-center mb-4">
                       <h3 className="text-sm uppercase tracking-widest text-[var(--text-primary)] font-mono">
                         {'>'} GENERATED SCRIPT OUTPUT
-                        </h3>
+                      </h3>
                       <GlowButton
-                          onClick={generateVideoFromScript}
+                        onClick={generateVideoFromScript}
                         variant="primary"
-                        >
+                      >
                         [ GENERATE VIDEO ]
                       </GlowButton>
-                      </div>
+                    </div>
                     <div className="border border-[var(--border-primary)] bg-black bg-opacity-60 p-6">
                       <pre className="whitespace-pre-wrap font-mono text-xs text-[var(--text-primary)] leading-relaxed">
-                          {generatedScript}
-                        </pre>
-                      </div>
+                        {generatedScript}
+                      </pre>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
+              </div>
             </TerminalPanel>
           </motion.div>
         )}
@@ -700,47 +724,58 @@ export default function Home() {
                   placeholder="Enter detailed video description..."
                   multiline
                   rows={4}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={loading}
-              />
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  disabled={loading}
+                />
 
                 <GlowButton
-              onClick={generateVideo}
-              disabled={loading || !prompt.trim()}
+                  onClick={generateVideo}
+                  disabled={loading || !prompt.trim()}
                   loading={loading}
                   className="w-full"
                 >
                   {loading ? `GENERATING... ${generationProgress}%` : '[ INITIATE VIDEO GENERATION ]'}
                 </GlowButton>
 
-            {loading && generatedVideoId && (
+                {loading && generatedVideoId && (
                   <div className="border border-[var(--border-primary)] bg-[var(--text-primary)] bg-opacity-5 p-6">
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between mb-2">
                       <StatusBadge status={generationStatus as any} />
-                      <span className="text-[var(--text-primary)] font-mono text-sm">
-                    {generationProgress}%
-                  </span>
-                </div>
+                      <span className="text-[#000000] font-mono text-sm">
+                        {generationProgress}%
+                      </span>
+                    </div>
                     <ProgressBar progress={generationProgress} label="GENERATION PROGRESS" showPercentage={false} />
-                    <div className="mt-3 text-[10px] text-[var(--text-muted)] font-mono">
-                      VIDEO ID: {generatedVideoId}
-                </div>
-              </div>
-            )}
+                    <div className="mt-3 flex items-center justify-between">
+                      <div className="text-[12px] text-[#222222] font-mono">
+                        VIDEO ID: {generatedVideoId}
+                      </div>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(generatedVideoId);
+                        }}
+                        className="border border-[var(--border-dim)] text-[var(--text-muted)] px-3 py-1 text-[10px] uppercase tracking-wider hover:border-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] transition-all"
+                        title="Copy Video ID"
+                      >
+                        [ COPY ]
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-            {error && (
+                {error && (
                   <div className="border border-[var(--accent-red)] bg-[var(--accent-red)] bg-opacity-10 p-4">
                     <div className="flex items-start gap-3">
-                      <span className="text-[var(--accent-red)] text-xl">⚠</span>
-                  <div>
-                        <div className="text-[var(--accent-red)] font-bold text-sm uppercase mb-1">CRITICAL ERROR</div>
-                        <div className="text-[var(--accent-red)] text-xs">{error}</div>
+                      <span className="text-[#000] text-xl">⚠</span>
+                      <div>
+                        <div className="text-[#000] font-bold text-sm uppercase mb-1">CRITICAL ERROR</div>
+                        <div className="text-[#000] text-xs">{error}</div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
+                )}
 
                 {videoUrl && (
                   <motion.div
@@ -762,7 +797,7 @@ export default function Home() {
                       <a
                         href={videoUrl}
                         download
-                        className="flex-1 text-center border border-[var(--border-primary)] text-[var(--text-primary)] px-6 py-3 text-sm uppercase tracking-wider hover:bg-[var(--text-primary)] hover:bg-opacity-10 transition-all"
+                        className="flex-1 text-center border border-[var(--border-primary)] text-[var(--text-primary)] px-6 py-3 text-sm uppercase tracking-wider hover:bg-[var(--accent-cyan)] hover:bg-opacity-10 hover:border-[var(--accent-cyan)] hover:text-[#000000] transition-all"
                       >
                         [ DOWNLOAD ]
                       </a>
@@ -790,45 +825,45 @@ export default function Home() {
                 <TerminalInput
                   label="VIDEO IDENTIFICATION CODE"
                   placeholder="vid_xxxxxxxx..."
-                value={videoId}
-                onChange={(e) => setVideoId(e.target.value)}
-                disabled={checkingStatus || autoPolling}
-              />
+                  value={videoId}
+                  onChange={(e) => setVideoId(e.target.value)}
+                  disabled={checkingStatus || autoPolling}
+                />
 
-            <div className="flex gap-3">
+                <div className="flex gap-3">
                   <GlowButton
-                onClick={checkVideoStatus}
-                disabled={checkingStatus || autoPolling || !videoId.trim()}
+                    onClick={checkVideoStatus}
+                    disabled={checkingStatus || autoPolling || !videoId.trim()}
                     loading={checkingStatus}
                     className="flex-1"
                   >
                     {checkingStatus ? 'CHECKING...' : '[ CHECK STATUS ]'}
                   </GlowButton>
 
-              {videoStatus && (videoStatus.status === 'in_progress' || videoStatus.status === 'queued') && (
+                  {videoStatus && (videoStatus.status === 'in_progress' || videoStatus.status === 'queued') && (
                     <GlowButton
-                  onClick={autoPolling ? stopPolling : startPolling}
+                      onClick={autoPolling ? stopPolling : startPolling}
                       variant={autoPolling ? 'danger' : 'primary'}
                       className="flex-1"
                     >
                       {autoPolling ? '[ STOP POLLING ]' : '[ AUTO-POLL ]'}
                     </GlowButton>
-              )}
-            </div>
+                  )}
+                </div>
 
-            {statusError && (
+                {statusError && (
                   <div className="border border-[var(--accent-red)] bg-[var(--accent-red)] bg-opacity-10 p-4">
-                    <div className="text-[var(--accent-red)] text-xs">{statusError}</div>
-              </div>
-            )}
+                    <div className="text-[#000000] text-xs">{statusError}</div>
+                  </div>
+                )}
 
-            {videoStatus && (
+                {videoStatus && (
                   <div className="border border-[var(--border-dim)] bg-black bg-opacity-60 p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-[var(--text-muted)] uppercase">Status:</span>
                       <StatusBadge status={videoStatus.status} showDot={true} />
-                  </div>
-                  {videoStatus.progress !== undefined && (
+                    </div>
+                    {videoStatus.progress !== undefined && (
                       <ProgressBar progress={videoStatus.progress} label="Progress" />
                     )}
                     <div className="grid grid-cols-2 gap-3 text-xs">
@@ -836,34 +871,34 @@ export default function Home() {
                         <span className="text-[var(--text-muted)]">ID:</span>
                         <span className="text-[var(--text-primary)] ml-2 font-mono break-all">{videoStatus.video_id}</span>
                       </div>
-                  {videoStatus.model && (
+                      {videoStatus.model && (
                         <div>
                           <span className="text-[var(--text-muted)]">Model:</span>
                           <span className="text-[var(--text-primary)] ml-2">{videoStatus.model}</span>
-                    </div>
-                  )}
-                  {videoStatus.seconds && (
+                        </div>
+                      )}
+                      {videoStatus.seconds && (
                         <div>
                           <span className="text-[var(--text-muted)]">Duration:</span>
                           <span className="text-[var(--text-primary)] ml-2">{videoStatus.seconds}s</span>
-                    </div>
-                  )}
-                  {videoStatus.size && (
+                        </div>
+                      )}
+                      {videoStatus.size && (
                         <div>
                           <span className="text-[var(--text-muted)]">Size:</span>
                           <span className="text-[var(--text-primary)] ml-2">{videoStatus.size}</span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                    </div>
-                  {videoStatus.error && (
+                    {videoStatus.error && (
                       <div className="border border-[var(--accent-red)] bg-[var(--accent-red)] bg-opacity-10 p-3 text-xs">
                         <div className="text-[var(--accent-red)] font-bold">{videoStatus.error.code}</div>
                         <div className="text-[var(--accent-red)]">{videoStatus.error.message}</div>
-                    </div>
-                  )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
             </TerminalPanel>
           </motion.div>
         )}
@@ -876,118 +911,118 @@ export default function Home() {
             exit={{ opacity: 0, x: 20 }}
           >
             <TerminalPanel title="VIDEO ARCHIVE DATABASE" status="active">
-                  {loadingVideos ? (
-                    <div className="text-center py-12">
+              {loadingVideos ? (
+                <div className="text-center py-12">
                   <div className="loading-bar w-64 mx-auto"></div>
                   <p className="mt-4 text-[var(--text-muted)] text-sm uppercase tracking-wide">
                     LOADING ARCHIVE...
                   </p>
-                    </div>
-                  ) : savedVideos.length === 0 ? (
-                    <div className="text-center py-12">
+                </div>
+              ) : savedVideos.length === 0 ? (
+                <div className="text-center py-12">
                   <div className="text-6xl text-[var(--text-muted)] mb-4">⊗</div>
                   <h3 className="text-lg uppercase text-[var(--text-primary)] mb-2 tracking-wider">
                     NO ARCHIVED VIDEOS
-                      </h3>
+                  </h3>
                   <p className="text-[var(--text-muted)] text-sm">
                     Generate a video to populate the archive
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-sm uppercase tracking-widest text-[var(--text-primary)] font-mono">
                       {'>'} ARCHIVE ENTRIES: {savedVideos.length}
-                        </h3>
-                        <button
-                          onClick={loadSavedVideos}
+                    </h3>
+                    <button
+                      onClick={loadSavedVideos}
                       className="border border-[var(--border-dim)] text-[var(--text-muted)] px-4 py-2 text-xs uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-all"
-                        >
+                    >
                       [ REFRESH ]
-                        </button>
-                      </div>
-                      {savedVideos.map((video) => (
-                        <div
-                          key={video.video_id}
+                    </button>
+                  </div>
+                  {savedVideos.map((video) => (
+                    <div
+                      key={video.video_id}
                       className="border border-[var(--border-dim)] bg-black bg-opacity-60 p-6 hover:border-[var(--border-primary)] transition-all"
                     >
                       <div className="flex justify-between items-start mb-4">
                         <StatusBadge status={video.status} />
-                                {video.progress !== undefined && (
+                        {video.progress !== undefined && (
                           <span className="text-sm font-mono text-[var(--text-primary)]">
-                                    {video.progress}%
-                                  </span>
-                                )}
-                              </div>
+                            {video.progress}%
+                          </span>
+                        )}
+                      </div>
 
                       <div className="text-xs font-mono text-[var(--text-muted)] mb-4 break-all">
                         ID: {video.video_id}
-                          </div>
+                      </div>
 
-                          {video.progress !== undefined && video.status === 'in_progress' && (
+                      {video.progress !== undefined && video.status === 'in_progress' && (
                         <ProgressBar progress={video.progress} label="Generation Progress" />
                       )}
 
                       <div className="grid grid-cols-2 gap-3 text-xs mt-4">
-                            {video.model && (
-                              <div>
+                        {video.model && (
+                          <div>
                             <span className="text-[var(--text-muted)]">MODEL:</span>
                             <span className="text-[var(--text-primary)] ml-2">{video.model}</span>
-                              </div>
-                            )}
-                            {video.size && (
-                              <div>
+                          </div>
+                        )}
+                        {video.size && (
+                          <div>
                             <span className="text-[var(--text-muted)]">SIZE:</span>
                             <span className="text-[var(--text-primary)] ml-2">{video.size}</span>
-                              </div>
-                            )}
-                            {video.seconds && (
-                              <div>
+                          </div>
+                        )}
+                        {video.seconds && (
+                          <div>
                             <span className="text-[var(--text-muted)]">DURATION:</span>
                             <span className="text-[var(--text-primary)] ml-2">{video.seconds}s</span>
-                              </div>
-                            )}
-                            {video.created_at && (
-                              <div>
+                          </div>
+                        )}
+                        {video.created_at && (
+                          <div>
                             <span className="text-[var(--text-muted)]">CREATED:</span>
                             <span className="text-[var(--text-primary)] ml-2">
-                                  {new Date(video.created_at * 1000).toLocaleDateString()}
-                                </span>
-                              </div>
-                            )}
+                              {new Date(video.created_at * 1000).toLocaleDateString()}
+                            </span>
                           </div>
+                        )}
+                      </div>
 
-                          {video.status === 'completed' && video.video_data && (
+                      {video.status === 'completed' && video.video_data && (
                         <div className="mt-4">
                           <div className="border border-[var(--border-primary)] p-2 bg-black mb-3">
-                                <video
-                                  src={video.video_data}
-                                  controls
+                            <video
+                              src={video.video_data}
+                              controls
                               className="w-full"
                             />
-                              </div>
-                              <a
-                                href={video.video_data}
-                                download={`video_${video.video_id}.mp4`}
+                          </div>
+                          <a
+                            href={video.video_data}
+                            download={`video_${video.video_id}.mp4`}
                             className="block w-full text-center border border-[var(--border-primary)] text-[var(--text-primary)] px-6 py-3 text-sm uppercase tracking-wider hover:bg-[var(--text-primary)] hover:bg-opacity-10 transition-all"
-                              >
+                          >
                             [ DOWNLOAD VIDEO ]
-                              </a>
-                            </div>
-                          )}
+                          </a>
+                        </div>
+                      )}
 
-                          {video.error && (
+                      {video.error && (
                         <div className="mt-4 border border-[var(--accent-red)] bg-[var(--accent-red)] bg-opacity-10 p-3 text-xs">
                           <div className="text-[var(--accent-red)] font-bold mb-1">
                             ERROR: {video.error.code}
-                              </div>
+                          </div>
                           <div className="text-[var(--accent-red)]">{video.error.message}</div>
-                            </div>
-                          )}
                         </div>
-                      ))}
+                      )}
                     </div>
-                  )}
+                  ))}
+                </div>
+              )}
             </TerminalPanel>
           </motion.div>
         )}
@@ -1002,15 +1037,15 @@ export default function Home() {
             <div className="flex items-start gap-2">
               <span className="text-[var(--text-primary)]">{'>'}</span>
               <span>Use Script Generator to create professional video ad scripts with AI</span>
-          </div>
+            </div>
             <div className="flex items-start gap-2">
               <span className="text-[var(--text-primary)]">{'>'}</span>
               <span>Video generation time varies based on complexity and model selection</span>
-          </div>
+            </div>
             <div className="flex items-start gap-2">
               <span className="text-[var(--text-primary)]">{'>'}</span>
               <span>All generated videos are stored locally and accessible via the Archive</span>
-        </div>
+            </div>
           </div>
         </TerminalPanel>
       </div>

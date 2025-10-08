@@ -8,7 +8,7 @@ const QUALITY_MODEL_MAP: Record<string, string> = {
 
 export async function POST(request: NextRequest) {
   try {
-    const { companyName, companyType, product, thread, quality = 'mini', orientation = 'horizontal' } = await request.json();
+    const { companyName, companyType, product, thread, quality = 'mini', orientation = 'horizontal', duration = '12' } = await request.json();
 
     if (!companyName || !companyType || !thread) {
       return NextResponse.json(
@@ -35,17 +35,18 @@ export async function POST(request: NextRequest) {
       ? 'Vertical/portrait framing with subjects centered. Optimize for mobile viewing with close-up shots and minimal horizontal movement.'
       : 'Horizontal/landscape framing with wider shots. Utilize full width for cinematic compositions and dynamic camera movements.';
 
-    console.log('Generating script for:', { companyName, companyType, product, thread, quality, model, orientation });
+    console.log('Generating script for:', { companyName, companyType, product, thread, quality, model, orientation, duration });
 
-    const prompt = `You are a professional video advertisement scriptwriter. Create a detailed 12-second video ad script optimized for ${orientation} video format.
+    const prompt = `You are a professional video advertisement scriptwriter. Create a detailed ${duration}-second video ad script optimized for ${orientation} video format.
 
 Company: ${companyName}
 Type: ${companyType}${product ? `\nProduct Details: ${product}` : ''}
 Creative Thread: ${thread}
 Video Format: ${videoDimensions}
 Frame Composition: ${frameComposition}
+Duration: ${duration} seconds
 
-Create a 12-second video ad script with:
+Create a ${duration}-second video ad script with:
 - 3 distinct scenes (approximately 3-5 seconds each)
 - Specific timing for each scene
 - Detailed visual descriptions optimized for ${orientation} framing
@@ -54,19 +55,19 @@ Create a 12-second video ad script with:
 
 IMPORTANT: All visual descriptions should be optimized for ${videoDimensions} format with ${frameComposition.toLowerCase()}
 
-Format the script EXACTLY like this example:
+Format the script EXACTLY like this example (adjust scene timings for ${duration} seconds):
 
-12-Second Video Ad Script
+${duration}-Second Video Ad Script
 
-Scene 1 — [0-3s | Opening hook]
+Scene 1 — [0-${Math.floor(parseInt(duration) / 3)}s | Opening hook]
 (Visual: Describe the opening visual in detail)
 VO: "Voice-over text here"
 
-Scene 2 — [3-7s | Product introduction/transformation]
+Scene 2 — [${Math.floor(parseInt(duration) / 3)}-${Math.floor(parseInt(duration) * 2 / 3)}s | Product introduction/transformation]
 (Visual: Describe the main visual)
 VO: "Voice-over text here"
 
-Scene 3 — [7-12s | Resolution & brand message]
+Scene 3 — [${Math.floor(parseInt(duration) * 2 / 3)}-${duration}s | Resolution & brand message]
 (Visual: Describe the closing visual)
 VO: "Voice-over text here"
 On-screen text: Brand tagline
