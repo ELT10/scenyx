@@ -12,6 +12,7 @@ type PaymentRow = {
   credited_microcredits: number | null;
   tx_signature: string | null;
   reference: string | null;
+  type: 'intent' | 'manual';
 };
 
 const USDC_MINT = process.env.USDC_MINT as string;
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
       console.log('🔎 Looking up payment by reference:', reference);
       const { data, error } = await supabaseAdmin
         .from('payments')
-        .select('id, user_id, status, amount_usd_micros, credited_microcredits, tx_signature, reference')
+        .select('id, user_id, status, amount_usd_micros, credited_microcredits, tx_signature, reference, type')
         .eq('reference', reference)
         .eq('user_id', session.userId)  // Only allow user to confirm their own payments
         .single<PaymentRow>();
@@ -93,7 +94,7 @@ export async function POST(req: NextRequest) {
       console.log('🔎 Looking up payment by signature:', signature);
       const { data, error } = await supabaseAdmin
         .from('payments')
-        .select('id, user_id, status, amount_usd_micros, credited_microcredits, tx_signature, reference')
+        .select('id, user_id, status, amount_usd_micros, credited_microcredits, tx_signature, reference, type')
         .eq('tx_signature', signature)
         .eq('user_id', session.userId)  // Only allow user to confirm their own payments
         .single<PaymentRow>();
