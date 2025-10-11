@@ -16,6 +16,8 @@
   --accent-cyan: #00d4ff;
   --accent-red: #ff3333;
   --accent-amber: #ffa500;
+  --accent-green: #00ff88;
+  --accent-yellow: #ffcc00;
   --glow-primary: rgba(255, 255, 255, 0.5);
   --glow-cyan: rgba(0, 212, 255, 0.5);
 }

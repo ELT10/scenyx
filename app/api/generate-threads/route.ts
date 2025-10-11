@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withCreditGuard } from '@/lib/withCreditGuard';
+import { estimateChatUsdMicros } from '@/lib/pricing';
 
 const QUALITY_MODEL_MAP: Record<string, string> = {
   'nano': 'gpt-5-nano',
@@ -6,24 +8,21 @@ const QUALITY_MODEL_MAP: Record<string, string> = {
   'high': 'gpt-5',
 };
 
-export async function POST(request: NextRequest) {
-  try {
-    const { companyName, companyType, product, quality = 'mini', orientation = 'horizontal', duration = '12' } = await request.json();
+export const POST = withCreditGuard<{ quality?: string; companyName?: string; companyType?: string; product?: string; orientation?: string; duration?: string }>({
+  estimateUsdMicros: async ({ quality = 'mini' }) => {
+    const model = QUALITY_MODEL_MAP[quality] || QUALITY_MODEL_MAP['mini'];
+    // Conservative upper-bound estimate with buffer for reasoning tokens
+    // GPT-5 can use significant reasoning tokens, so estimate high
+    return estimateChatUsdMicros(model, 1000, 3000);  // Increased buffer
+  },
+  runWithUsageUsdMicros: async ({ companyName, companyType, product, quality = 'mini', orientation = 'horizontal', duration = '12' }) => {
 
     if (!companyName || !companyType) {
-      return NextResponse.json(
+      const res = NextResponse.json(
         { error: 'Company name and type are required' },
         { status: 400 }
       );
-    }
-
-    const apiKey = process.env.OPEN_API_KEY;
-    
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'OpenAI API key is not configured' },
-        { status: 500 }
-      );
+      return { response: res, usageUsdMicros: 0 };
     }
 
     // Get the model based on quality level
@@ -106,26 +105,16 @@ IMPORTANT: Return a JSON object with a "threads" array containing exactly 4 thre
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${process.env.OPEN_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(requestBody),
     });
 
-    console.log('=== OPENAI API RESPONSE ===');
-    console.log('Response status:', response.status);
-    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      console.error('❌ Thread generation failed:', errorData);
-      return NextResponse.json(
-        { 
-          error: errorData.error?.message || 'Failed to generate threads',
-          details: errorData
-        },
-        { status: response.status }
-      );
+      const res = NextResponse.json({ error: errorData.error?.message || 'Failed to generate threads', details: errorData }, { status: response.status });
+      return { response: res, usageUsdMicros: 0 };
     }
 
     const data = await response.json();
@@ -173,10 +162,11 @@ IMPORTANT: Return a JSON object with a "threads" array containing exactly 4 thre
       if (threads.length === 0) {
         console.error('❌ Empty threads array!');
         console.error('Original parsed object:', parsed);
-        return NextResponse.json(
+        const res = NextResponse.json(
           { error: 'API returned empty threads. Please try again.' },
           { status: 500 }
         );
+        return { response: res, usageUsdMicros: 0 };
       }
       
       if (threads.length < 4) {
@@ -186,29 +176,21 @@ IMPORTANT: Return a JSON object with a "threads" array containing exactly 4 thre
       console.error('❌ Failed to parse threads:', parseError);
       console.error('Parse error message:', parseError instanceof Error ? parseError.message : 'Unknown error');
       console.error('Raw content that failed to parse:', content);
-      return NextResponse.json(
+      const res = NextResponse.json(
         { error: 'Failed to parse generated threads' },
         { status: 500 }
       );
+      return { response: res, usageUsdMicros: 0 };
     }
 
     console.log('✅ Successfully generated threads:', threads.length, 'items');
 
-    return NextResponse.json({
-      success: true,
-      threads: threads,
-    });
-
-  } catch (error: any) {
-    console.error('Error generating threads:', error);
-    
-    return NextResponse.json(
-      { 
-        error: error.message || 'Failed to generate threads',
-        details: error.response?.data || null
-      },
-      { status: error.status || 500 }
-    );
+    const res = NextResponse.json({ success: true, threads });
+    const usage = data.usage;
+    const inputTokens = usage?.prompt_tokens ?? 600;
+    const outputTokens = usage?.completion_tokens ?? 800;
+    const usageUsdMicros = estimateChatUsdMicros(model, inputTokens, outputTokens);
+    return { response: res, usageUsdMicros };
   }
-}
+});
 

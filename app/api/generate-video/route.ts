@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withCreditGuard } from '@/lib/withCreditGuard';
+import { estimateVideoUsdMicros } from '@/lib/pricing';
 
 const OPENAI_API_BASE = 'https://api.openai.com/v1';
 
@@ -13,24 +15,19 @@ interface VideoResponse {
   size?: string;
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const { prompt, pollForCompletion, model = 'sora-2-pro', seconds = '12', orientation = 'horizontal', resolution = 'standard' } = await request.json();
+export const POST = withCreditGuard<{ prompt?: string; pollForCompletion?: boolean; model?: string; seconds?: string; orientation?: string; resolution?: string }>({
+  estimateUsdMicros: async ({ model = 'sora-2-pro', seconds = '12', resolution = 'standard' }) => {
+    const secs = parseInt(seconds) || 12;
+    return estimateVideoUsdMicros(model, secs, resolution);
+  },
+  runWithUsageUsdMicros: async ({ prompt, pollForCompletion, model = 'sora-2-pro', seconds = '12', orientation = 'horizontal', resolution = 'standard' }, _req) => {
 
     if (!prompt) {
-      return NextResponse.json(
+      const res = NextResponse.json(
         { error: 'Prompt is required' },
         { status: 400 }
       );
-    }
-
-    const apiKey = process.env.OPEN_API_KEY;
-    
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'OpenAI API key is not configured' },
-        { status: 500 }
-      );
+      return { response: res, usageUsdMicros: 0 };
     }
 
     // Determine size based on orientation and resolution
@@ -49,7 +46,7 @@ export async function POST(request: NextRequest) {
     const createResponse = await fetch(`${OPENAI_API_BASE}/videos`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${process.env.OPEN_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -63,13 +60,14 @@ export async function POST(request: NextRequest) {
     if (!createResponse.ok) {
       const errorData = await createResponse.json().catch(() => ({}));
       console.error('Video creation failed:', errorData);
-      return NextResponse.json(
+      const res = NextResponse.json(
         { 
           error: errorData.error?.message || 'Failed to start video generation',
           details: errorData
         },
         { status: createResponse.status }
       );
+      return { response: res, usageUsdMicros: 0 };
     }
 
     let video: VideoResponse = await createResponse.json();
@@ -77,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     // If pollForCompletion is false, return immediately with video_id
     if (pollForCompletion === false) {
-      return NextResponse.json({
+      const res = NextResponse.json({
         success: true,
         video_id: video.id,
         status: video.status,
@@ -85,6 +83,8 @@ export async function POST(request: NextRequest) {
         progress: video.progress || 0,
         message: 'Video generation started. Use the video_id to check progress.',
       });
+      const usageUsdMicros = estimateVideoUsdMicros(model, parseInt(seconds) || 12, resolution);
+      return { response: res, usageUsdMicros };
     }
 
     // Step 2: Poll until completion (legacy behavior for backwards compatibility)
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       const pollResponse = await fetch(`${OPENAI_API_BASE}/videos/${video.id}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${process.env.OPEN_API_KEY}`,
         },
       });
 
@@ -121,15 +121,16 @@ export async function POST(request: NextRequest) {
       const contentResponse = await fetch(`${OPENAI_API_BASE}/videos/${video.id}/content`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${process.env.OPEN_API_KEY}`,
         },
       });
 
       if (!contentResponse.ok) {
-        return NextResponse.json(
+        const res = NextResponse.json(
           { error: 'Failed to download video content' },
           { status: contentResponse.status }
         );
+        return { response: res, usageUsdMicros: 0 };
       }
 
       const arrayBuffer = await contentResponse.arrayBuffer();
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest) {
       
       console.log(`Video downloaded successfully. Size: ${buffer.length} bytes`);
       
-      return NextResponse.json({
+      const res = NextResponse.json({
         success: true,
         video_data: `data:video/mp4;base64,${base64Video}`,
         video_id: video.id,
@@ -146,8 +147,10 @@ export async function POST(request: NextRequest) {
         model: video.model,
         progress: video.progress,
       });
+      const usageUsdMicros = estimateVideoUsdMicros(model, parseInt(seconds) || 12, resolution);
+      return { response: res, usageUsdMicros };
     } else if (video.status === 'failed') {
-      return NextResponse.json(
+      const res = NextResponse.json(
         { 
           error: 'Video generation failed',
           status: video.status,
@@ -155,9 +158,9 @@ export async function POST(request: NextRequest) {
         },
         { status: 500 }
       );
+      return { response: res, usageUsdMicros: 0 };
     } else {
-      // Timeout
-      return NextResponse.json(
+      const res = NextResponse.json(
         { 
           error: 'Video generation timed out. Please try again.',
           status: video.status,
@@ -165,18 +168,8 @@ export async function POST(request: NextRequest) {
         },
         { status: 408 }
       );
+      return { response: res, usageUsdMicros: 0 };
     }
-
-  } catch (error: any) {
-    console.error('Error generating video:', error);
-    
-    return NextResponse.json(
-      { 
-        error: error.message || 'Failed to generate video',
-        details: error.response?.data || null
-      },
-      { status: error.status || 500 }
-    );
   }
-}
+});
 

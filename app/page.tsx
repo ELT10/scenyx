@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import TerminalPanel from '@/components/TerminalPanel';
 import GlowButton from '@/components/GlowButton';
@@ -10,6 +10,10 @@ import DataGrid from '@/components/DataGrid';
 import BackgroundEffects from '@/components/BackgroundEffects';
 import TerminalInput from '@/components/TerminalInput';
 import GlitchText from '@/components/GlitchText';
+import WalletControls from '@/components/WalletControls';
+import CostEstimate from '@/components/CostEstimate';
+import { estimateVideoCredits, estimateChatCredits } from '@/lib/client/pricing';
+import { notifyCreditsUpdated } from '@/lib/client/events';
 
 interface VideoStatus {
   video_id: string;
@@ -77,6 +81,20 @@ export default function Home() {
   const [loadingScript, setLoadingScript] = useState(false);
   const [scriptError, setScriptError] = useState<string | null>(null);
 
+  // Cost estimates
+  const videoCost = useMemo(() => {
+    const seconds = parseInt(videoDuration) || 12;
+    return estimateVideoCredits(videoQuality, seconds, videoResolution);
+  }, [videoQuality, videoDuration, videoResolution]);
+
+  const threadsCost = useMemo(() => {
+    return estimateChatCredits(scriptQuality, 1000, 1500);
+  }, [scriptQuality]);
+
+  const scriptCost = useMemo(() => {
+    return estimateChatCredits(scriptQuality, 1500, 2000);
+  }, [scriptQuality]);
+
   // LocalStorage functions
   const saveVideoIdToLocalStorage = (videoId: string, prompt: string) => {
     try {
@@ -117,6 +135,7 @@ export default function Home() {
         setVideoUrl(data.video_data);
         setLoading(false);
         setGenerationProgress(100);
+        notifyCreditsUpdated(); // Credits were deducted, update header
 
         if (generationPollingRef.current) {
           clearInterval(generationPollingRef.current);
@@ -125,6 +144,7 @@ export default function Home() {
       } else if (data.status === 'failed') {
         setError('Video generation failed');
         setLoading(false);
+        notifyCreditsUpdated(); // Credits may have been refunded, update header
 
         if (generationPollingRef.current) {
           clearInterval(generationPollingRef.current);
@@ -332,8 +352,10 @@ export default function Home() {
       }
 
       setThreads(data.threads);
+      notifyCreditsUpdated(); // Credits deducted, update header
     } catch (err: any) {
       setScriptError(err.message || 'An error occurred while generating threads');
+      notifyCreditsUpdated(); // Credits may have been refunded on error
     } finally {
       setLoadingThreads(false);
     }
@@ -370,8 +392,10 @@ export default function Home() {
       }
 
       setGeneratedScript(data.script);
+      notifyCreditsUpdated(); // Credits deducted, update header
     } catch (err: any) {
       setScriptError(err.message || 'An error occurred while generating script');
+      notifyCreditsUpdated(); // Credits may have been refunded on error
     } finally {
       setLoadingScript(false);
     }
@@ -419,8 +443,11 @@ export default function Home() {
           </div>
         </motion.div>
 
-        {/* Tabs */}
+        {/* Wallet + Tabs */}
         <div className="flex gap-2 mb-8 justify-center">
+          <div className="absolute right-6 -mt-12">
+            <WalletControls />
+          </div>
           <button
             onClick={() => setActiveTab('script')}
             className={`tab-button ${activeTab === 'script' ? 'active' : ''}`}
@@ -540,6 +567,18 @@ export default function Home() {
                   disabled={loadingThreads || loadingScript}
                 />
 
+                {!customThread.trim() ? (
+                  <CostEstimate 
+                    credits={threadsCost} 
+                    operation="Thread Generation" 
+                  />
+                ) : (
+                  <CostEstimate 
+                    credits={scriptCost} 
+                    operation="Script Generation" 
+                  />
+                )}
+
                 <div className="flex gap-3">
                   {!customThread.trim() ? (
                     <GlowButton
@@ -603,6 +642,11 @@ export default function Home() {
                         </button>
                       ))}
                     </DataGrid>
+                    <CostEstimate 
+                      credits={scriptCost} 
+                      operation="Script Generation" 
+                      className="mt-4"
+                    />
                   </div>
                 )}
 
@@ -728,6 +772,11 @@ export default function Home() {
                   onChange={(e) => setPrompt(e.target.value)}
                   onKeyDown={handleKeyDown}
                   disabled={loading}
+                />
+
+                <CostEstimate 
+                  credits={videoCost} 
+                  operation="Video Generation" 
                 />
 
                 <GlowButton

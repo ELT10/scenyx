@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import DeviceDetector from "@/components/DeviceDetector";
+import Link from "next/link";
+import WalletProvider from '@/components/WalletProvider';
+
+import HeaderCredits from '@/components/HeaderCredits';
 
 export const metadata: Metadata = {
   title: "SCENYX",
@@ -26,27 +29,27 @@ export default function RootLayout({
         {/* System Status Bar */}
         <div className="fixed top-0 left-0 right-0 z-50 bg-black border-b border-[var(--border-primary)] px-4 py-2 flex items-center justify-between text-[10px] tracking-wider uppercase opacity-90">
           <div className="flex items-center gap-4">
-            <span className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
               <span className="status-dot active"></span>
               <span>SCENYX</span>
-            </span>
+            </Link>
             <span className="text-[var(--text-muted)]">|</span>
             <span className="text-[var(--accent-cyan)]">AI STUDIO</span>
             <span className="text-[var(--text-muted)]">|</span>
-            <span className="text-[var(--text-muted)]">
-              {new Date().toLocaleTimeString('en-US', { hour12: false })}
-            </span>
+            {/* Removed dynamic clock to avoid hydration mismatches */}
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[var(--text-muted)]">DEVICE:</span>
-            <DeviceDetector />
+          <div></div>
+          <div className="flex items-center gap-4">
+            <HeaderCredits />
           </div>
         </div>
 
         {/* Main content with top padding for status bar */}
-        <div className="pt-10">
-          {children}
-        </div>
+        <WalletProvider>
+          <div className="pt-10">
+            {children}
+          </div>
+        </WalletProvider>
 
         {/* System Footer */}
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-black border-t border-[var(--border-dim)] px-4 py-1 flex items-center justify-between text-[9px] tracking-wider uppercase opacity-80">

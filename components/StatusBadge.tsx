@@ -41,7 +41,7 @@ export default function StatusBadge({ status, showDot = true }: StatusBadgeProps
     <motion.div
       initial={{ scale: 0.8, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      className={`inline-flex items-center gap-2 px-3 py-1 border ${border} ${color} text-xs uppercase tracking-wider font-mono bg-[#fff]`}
+      className={`inline-flex items-center gap-2 px-3 py-1 border ${border} ${color} text-xs uppercase tracking-wider font-mono bg-[#292929]`}
     >
       {showDot && (
         <span className={`w-2 h-2 ${bg} rounded-full animate-pulse`}></span>
