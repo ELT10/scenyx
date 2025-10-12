@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withCreditGuard } from '@/lib/withCreditGuard';
 import { estimateVideoUsdMicros } from '@/lib/pricing';
+import { createVideoGeneration } from '@/lib/videoGenerations';
+import { getSession } from '@/lib/session';
+import { requireAccountId } from '@/lib/credits';
 
 const OPENAI_API_BASE = 'https://api.openai.com/v1';
 
@@ -13,6 +16,10 @@ interface VideoResponse {
   progress?: number;
   seconds?: string;
   size?: string;
+  error?: {
+    code: string;
+    message: string;
+  };
 }
 
 export const POST = withCreditGuard<{ prompt?: string; pollForCompletion?: boolean; model?: string; seconds?: string; orientation?: string; resolution?: string }>({
@@ -20,7 +27,7 @@ export const POST = withCreditGuard<{ prompt?: string; pollForCompletion?: boole
     const secs = parseInt(seconds) || 12;
     return estimateVideoUsdMicros(model, secs, resolution);
   },
-  runWithUsageUsdMicros: async ({ prompt, pollForCompletion, model = 'sora-2-pro', seconds = '12', orientation = 'horizontal', resolution = 'standard' }, _req) => {
+  runWithUsageUsdMicros: async ({ prompt, pollForCompletion, model = 'sora-2-pro', seconds = '12', orientation = 'horizontal', resolution = 'standard' }, _req, context) => {
 
     if (!prompt) {
       const res = NextResponse.json(
@@ -74,17 +81,45 @@ export const POST = withCreditGuard<{ prompt?: string; pollForCompletion?: boole
     console.log('Video generation started:', video);
 
     // If pollForCompletion is false, return immediately with video_id
+    // Store the video generation record with the hold ID for later finalization
     if (pollForCompletion === false) {
+      try {
+        // Store video generation with hold ID
+        await createVideoGeneration({
+          videoId: video.id,
+          userId: context.userId,
+          accountId: context.accountId,
+          holdId: context.holdId,
+          model,
+          prompt: prompt || '',
+          seconds,
+          size,
+          orientation,
+          resolution,
+        });
+        
+        console.log(`✅ Video generation tracked: ${video.id} with hold: ${context.holdId}`);
+      } catch (error: any) {
+        console.error('Failed to store video generation:', error);
+        // If we can't store the tracking, release the hold and fail
+        const res = NextResponse.json(
+          { error: 'Failed to initialize video generation tracking' },
+          { status: 500 }
+        );
+        return { response: res, usageUsdMicros: 0 };
+      }
+      
       const res = NextResponse.json({
         success: true,
         video_id: video.id,
         status: video.status,
         model: video.model,
         progress: video.progress || 0,
-        message: 'Video generation started. Use the video_id to check progress.',
+        message: 'Video generation started. Credits will be charged only if generation succeeds.',
       });
-      const usageUsdMicros = estimateVideoUsdMicros(model, parseInt(seconds) || 12, resolution);
-      return { response: res, usageUsdMicros };
+      
+      // Keep the hold active - it will be finalized when video completes or fails
+      return { response: res, usageUsdMicros: 0, keepHold: true };
     }
 
     // Step 2: Poll until completion (legacy behavior for backwards compatibility)
@@ -152,12 +187,15 @@ export const POST = withCreditGuard<{ prompt?: string; pollForCompletion?: boole
     } else if (video.status === 'failed') {
       const res = NextResponse.json(
         { 
-          error: 'Video generation failed',
+          error: video.error?.message || 'Video generation failed',
+          errorCode: video.error?.code || 'unknown_error',
+          errorDetails: video.error,
           status: video.status,
           video_id: video.id,
         },
         { status: 500 }
       );
+      // Don't charge credits for failed videos
       return { response: res, usageUsdMicros: 0 };
     } else {
       const res = NextResponse.json(

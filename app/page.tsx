@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { useWallet } from '@solana/wallet-adapter-react';
 import TerminalPanel from '@/components/TerminalPanel';
 import GlowButton from '@/components/GlowButton';
 import StatusBadge from '@/components/StatusBadge';
@@ -10,7 +11,6 @@ import DataGrid from '@/components/DataGrid';
 import BackgroundEffects from '@/components/BackgroundEffects';
 import TerminalInput from '@/components/TerminalInput';
 import GlitchText from '@/components/GlitchText';
-import WalletControls from '@/components/WalletControls';
 import CostEstimate from '@/components/CostEstimate';
 import { estimateVideoCredits, estimateChatCredits } from '@/lib/client/pricing';
 import { notifyCreditsUpdated } from '@/lib/client/events';
@@ -37,6 +37,9 @@ interface Thread {
 }
 
 export default function Home() {
+  // Wallet connection
+  const { publicKey } = useWallet();
+  
   // Tab state
   const [activeTab, setActiveTab] = useState<'generate' | 'view' | 'script'>('generate');
 
@@ -142,9 +145,12 @@ export default function Home() {
           generationPollingRef.current = null;
         }
       } else if (data.status === 'failed') {
-        setError('Video generation failed');
+        // Show detailed error information
+        const errorMessage = data.error?.message || 'Video generation failed';
+        const errorCode = data.error?.code || 'unknown_error';
+        setError(`${errorCode.toUpperCase()}: ${errorMessage}`);
         setLoading(false);
-        notifyCreditsUpdated(); // Credits may have been refunded, update header
+        notifyCreditsUpdated(); // Credits were not charged for failed videos
 
         if (generationPollingRef.current) {
           clearInterval(generationPollingRef.current);
@@ -164,6 +170,11 @@ export default function Home() {
   }, []);
 
   const generateVideo = async () => {
+    if (!publicKey) {
+      setError('WALLET NOT CONNECTED: Please connect your wallet to generate videos');
+      return;
+    }
+
     if (!prompt.trim()) {
       setError('Please enter a prompt');
       return;
@@ -195,7 +206,11 @@ export default function Home() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate video');
+        // Show detailed error if available
+        const errorMsg = data.errorCode 
+          ? `${data.errorCode.toUpperCase()}: ${data.error}` 
+          : (data.error || 'Failed to generate video');
+        throw new Error(errorMsg);
       }
 
       setGeneratedVideoId(data.video_id);
@@ -319,6 +334,11 @@ export default function Home() {
   }, [activeTab, loadSavedVideos]);
 
   const generateThreads = async () => {
+    if (!publicKey) {
+      setScriptError('WALLET NOT CONNECTED: Please connect your wallet to generate threads');
+      return;
+    }
+
     if (!companyName.trim() || !companyType.trim()) {
       setScriptError('Please fill in Company/Product Name and Product/Company Type');
       return;
@@ -362,6 +382,11 @@ export default function Home() {
   };
 
   const generateScript = async (thread: Thread | string) => {
+    if (!publicKey) {
+      setScriptError('WALLET NOT CONNECTED: Please connect your wallet to generate scripts');
+      return;
+    }
+
     const threadText = typeof thread === 'string' ? thread : thread.description;
 
     setLoadingScript(true);
@@ -443,11 +468,8 @@ export default function Home() {
           </div>
         </motion.div>
 
-        {/* Wallet + Tabs */}
+        {/* Tabs */}
         <div className="flex gap-2 mb-8 justify-center">
-          <div className="absolute right-6 -mt-12">
-            <WalletControls />
-          </div>
           <button
             onClick={() => setActiveTab('script')}
             className={`tab-button ${activeTab === 'script' ? 'active' : ''}`}
@@ -1090,6 +1112,10 @@ export default function Home() {
             <div className="flex items-start gap-2">
               <span className="text-[var(--text-primary)]">{'>'}</span>
               <span>Video generation time varies based on complexity and model selection</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-[var(--text-primary)]">{'>'}</span>
+              <span>Credits are only deducted when videos complete successfully - failed generations are free</span>
             </div>
             <div className="flex items-start gap-2">
               <span className="text-[var(--text-primary)]">{'>'}</span>

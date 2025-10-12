@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { finalizeVideoGeneration, getVideoGeneration, updateVideoGenerationStatus } from '@/lib/videoGenerations';
+import { releaseHold } from '@/lib/credits';
 
 const OPENAI_API_BASE = 'https://api.openai.com/v1';
 
@@ -40,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     console.log('Checking video status for ID:', videoId);
 
-    // Get video status
+    // Get video status from OpenAI
     const statusResponse = await fetch(`${OPENAI_API_BASE}/videos/${videoId}`, {
       method: 'GET',
       headers: {
@@ -48,20 +50,76 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    // If OpenAI API call fails, DON'T finalize credits
+    // The video might still be generating, we just can't check the status
     if (!statusResponse.ok) {
       const errorData = await statusResponse.json().catch(() => ({}));
-      console.error('Video status check failed:', errorData);
+      console.error('❌ OpenAI API error (status check failed):', statusResponse.status, errorData);
+      
+      // Return error to user but DON'T touch the hold
+      // Hold stays active - video might still be generating on OpenAI's side
       return NextResponse.json(
         { 
-          error: errorData.error?.message || 'Failed to retrieve video status',
-          details: errorData
+          error: errorData.error?.message || 'Failed to retrieve video status from OpenAI',
+          details: errorData,
+          note: 'Credits remain reserved. Video may still be generating.'
         },
         { status: statusResponse.status }
       );
     }
 
+    // Successfully got response from OpenAI
     const video: VideoResponse = await statusResponse.json();
-    console.log('Video status:', video);
+    console.log('✅ Video status from OpenAI:', video.status, video.id);
+
+    // Check if we're tracking this video generation for credit finalization
+    const videoGen = await getVideoGeneration(videoId);
+    
+    // ONLY finalize if OpenAI explicitly returned terminal status
+    // This prevents refunding credits when our API fails but video is still generating
+    if (videoGen && videoGen.credits_charged === null && (video.status === 'completed' || video.status === 'failed')) {
+      console.log('🎯 Terminal status received from OpenAI:', video.status);
+      
+      try {
+        const finalizationResult = await finalizeVideoGeneration(
+          videoId,
+          video.status,
+          video.error?.code,
+          video.error?.message
+        );
+        console.log('✅ Finalization successful:', finalizationResult);
+        
+        if (video.status === 'completed') {
+          console.log('💳 Credits charged for successful video:', videoId);
+        } else {
+          console.log('💰 Credits refunded - OpenAI returned failed status:', videoId, '- Error:', video.error?.code);
+        }
+      } catch (error: any) {
+        console.error('❌ Finalization failed:', error);
+        
+        // CRITICAL: If finalization fails AND OpenAI said video failed,
+        // we must release the hold manually to avoid keeping user's credits stuck
+        if (video.status === 'failed' && videoGen.hold_id) {
+          console.log('🚨 Attempting emergency hold release...');
+          try {
+            await releaseHold(videoGen.hold_id);
+            console.log('💰 Emergency hold release successful');
+          } catch (releaseError: any) {
+            console.error('🚨 CRITICAL: Could not release hold:', releaseError);
+            // This needs manual intervention - log it prominently
+            console.error('🚨 MANUAL ACTION REQUIRED: Release hold', videoGen.hold_id, 'for video', videoId);
+          }
+        }
+        
+        // Don't fail the request - user still gets video status
+      }
+    } else if (videoGen && videoGen.credits_charged === null) {
+      // Video is still generating (queued or in_progress)
+      console.log('⏳ Video still generating, hold remains active:', video.status);
+    } else if (videoGen && videoGen.credits_charged !== null) {
+      // Already finalized
+      console.log('✓ Video already finalized, credits_charged:', videoGen.credits_charged);
+    }
 
     // If video is completed, optionally fetch the content
     if (video.status === 'completed') {
@@ -109,12 +167,17 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('Error checking video status:', error);
+    // Network error, timeout, or other exception
+    console.error('❌ Exception while checking video status:', error);
+    
+    // DON'T finalize or touch credits - we don't know the real status
+    // Hold stays active - video might still be generating
     
     return NextResponse.json(
       { 
         error: error.message || 'Failed to check video status',
-        details: error.response?.data || null
+        details: error.response?.data || null,
+        note: 'Network or server error. Credits remain reserved. Video may still be generating.'
       },
       { status: error.status || 500 }
     );

@@ -33,7 +33,19 @@ export async function getSession() {
     .single();
   if (!data) return null;
   if (data.revoked_at || new Date(data.expires_at).getTime() < Date.now()) return null;
-  return { id: data.id, userId: data.user_id };
+  
+  // Get wallet address for this user
+  const { data: wallet } = await supabaseAdmin
+    .from('wallets')
+    .select('address')
+    .eq('user_id', data.user_id)
+    .single();
+  
+  return { 
+    id: data.id, 
+    userId: data.user_id,
+    walletAddress: wallet?.address || null
+  };
 }
 
 export async function revokeSession() {
@@ -42,6 +54,26 @@ export async function revokeSession() {
   if (!sessionId) return;
   await supabaseAdmin.from('sessions').update({ revoked_at: new Date().toISOString() }).eq('id', sessionId);
   cookieStore.set('scenyx_session', '', { path: '/', expires: new Date(0) });
+}
+
+/**
+ * Verify that the wallet address in the request matches the session's wallet address
+ * Returns the session if valid, null if mismatch or invalid session
+ */
+export async function getSessionWithWalletVerification(requestWalletAddress?: string) {
+  const session = await getSession();
+  if (!session) return null;
+  
+  // If a wallet address is provided in the request, verify it matches the session
+  if (requestWalletAddress && session.walletAddress !== requestWalletAddress) {
+    console.warn('Wallet address mismatch:', { 
+      session: session.walletAddress, 
+      request: requestWalletAddress 
+    });
+    return null;
+  }
+  
+  return session;
 }
 
 

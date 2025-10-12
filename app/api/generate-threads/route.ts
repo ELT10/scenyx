@@ -15,7 +15,7 @@ export const POST = withCreditGuard<{ quality?: string; companyName?: string; co
     // GPT-5 can use significant reasoning tokens, so estimate high
     return estimateChatUsdMicros(model, 1000, 3000);  // Increased buffer
   },
-  runWithUsageUsdMicros: async ({ companyName, companyType, product, quality = 'mini', orientation = 'horizontal', duration = '12' }) => {
+  runWithUsageUsdMicros: async ({ companyName, companyType, product, quality = 'mini', orientation = 'horizontal', duration = '12' }, _req, _context) => {
 
     if (!companyName || !companyType) {
       const res = NextResponse.json(

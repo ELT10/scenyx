@@ -1,16 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
+import { getSession, getSessionWithWalletVerification } from '@/lib/session';
 import { createHold, captureHold, releaseHold, requireAccountId } from '@/lib/credits';
 
 type Handler = (req: NextRequest) => Promise<NextResponse>;
 
+export interface CreditGuardContext {
+  userId: string;
+  accountId: string;
+  holdId: string;
+  estimatedUsdMicros: bigint;
+}
+
 export function withCreditGuard<TBody = any>(params: {
   estimateUsdMicros: (body: TBody) => Promise<number>;
-  runWithUsageUsdMicros: (body: TBody, req: NextRequest) => Promise<{ response: NextResponse; usageUsdMicros: number }>;
+  runWithUsageUsdMicros: (body: TBody, req: NextRequest, context: CreditGuardContext) => Promise<{ 
+    response: NextResponse; 
+    usageUsdMicros: number;
+    keepHold?: boolean; // If true, hold is kept active for later finalization
+  }>;
+  verifyWalletAddress?: boolean; // Optional: verify wallet address from header matches session
 }): Handler {
-  const { estimateUsdMicros, runWithUsageUsdMicros } = params;
+  const { estimateUsdMicros, runWithUsageUsdMicros, verifyWalletAddress = false } = params;
   return async function handler(req: NextRequest) {
-    const session = await getSession();
+    let session;
+    
+    if (verifyWalletAddress) {
+      // Extra security: verify wallet address from header matches session
+      const walletAddressHeader = req.headers.get('x-wallet-address');
+      session = await getSessionWithWalletVerification(walletAddressHeader || undefined);
+    } else {
+      session = await getSession();
+    }
+    
     if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
     const idempotencyKey = req.headers.get('Idempotency-Key') || crypto.randomUUID();
@@ -62,8 +83,24 @@ export function withCreditGuard<TBody = any>(params: {
       return NextResponse.json({ error: e.message || 'failed to create hold' }, { status: 500 });
     }
 
+    const context: CreditGuardContext = {
+      userId: session.userId,
+      accountId,
+      holdId: holdId!,
+      estimatedUsdMicros: estUsdMicros,
+    };
+
     try {
-      const { response, usageUsdMicros } = await runWithUsageUsdMicros(body, req);
+      const { response, usageUsdMicros, keepHold } = await runWithUsageUsdMicros(body, req, context);
+      
+      // If keepHold is true, don't finalize the hold yet
+      // It will be finalized later (e.g., when async video generation completes)
+      if (keepHold) {
+        console.log('⏳ Keeping hold active for later finalization:', holdId);
+        return response;
+      }
+      
+      // Normal flow: capture or release based on usage
       await captureHold(holdId!, BigInt(usageUsdMicros));
       return response;
     } catch (e: any) {

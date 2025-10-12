@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
-import { createTransferInstruction, getAssociatedTokenAddressSync } from '@solana/spl-token';
+import { createTransferInstruction, getAssociatedTokenAddressSync, getAccount } from '@solana/spl-token';
 import GlowButton from '@/components/GlowButton';
 import TerminalPanel from '@/components/TerminalPanel';
 import TerminalInput from '@/components/TerminalInput';
@@ -12,6 +13,8 @@ import StatusBadge from '@/components/StatusBadge';
 import { notifyCreditsUpdated } from '@/lib/client/events';
 
 const EXPLORER_BASE = 'https://solscan.io/tx/';
+const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'; // USDC mainnet
+const JUPITER_SWAP_URL = 'https://jup.ag/swap?sell=So11111111111111111111111111111111111111112&buy=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 function formatMicro(amount: number | null | undefined): string {
   if (amount === null || amount === undefined) return '0.000000';
@@ -47,10 +50,14 @@ type VerifyResponse = {
 };
 
 export default function CreditsPage() {
+  const router = useRouter();
   const { publicKey, sendTransaction } = useWallet();
   const { connection } = useConnection();
   const [balance, setBalance] = useState('0.000000');
   const [loadingBalance, setLoadingBalance] = useState(false);
+  const [usdcBalance, setUsdcBalance] = useState<number | null>(null);
+  const [loadingUsdcBalance, setLoadingUsdcBalance] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   const [usdAmount, setUsdAmount] = useState('10');
   const [addCreditsBusy, setAddCreditsBusy] = useState(false);
@@ -77,11 +84,16 @@ export default function CreditsPage() {
     try {
       setLoadingBalance(true);
       const res = await fetch('/api/credits/balance');
-      if (!res.ok) throw new Error('failed to load balance');
+      if (!res.ok) {
+        setIsAuthenticated(false);
+        throw new Error('failed to load balance');
+      }
       const data = await res.json();
       setBalance(data.balance ?? '0.000000');
+      setIsAuthenticated(true);
     } catch (err) {
       console.error('Failed to load balance', err);
+      setIsAuthenticated(false);
     } finally {
       setLoadingBalance(false);
     }
@@ -101,15 +113,51 @@ export default function CreditsPage() {
     }
   }, []);
 
+  const loadUsdcBalance = useCallback(async () => {
+    if (!publicKey || !connection) {
+      setUsdcBalance(null);
+      return;
+    }
+    
+    try {
+      setLoadingUsdcBalance(true);
+      const usdcMint = new PublicKey(USDC_MINT);
+      const userATA = getAssociatedTokenAddressSync(usdcMint, publicKey);
+      
+      try {
+        const tokenAccount = await getAccount(connection, userATA);
+        const balance = Number(tokenAccount.amount) / 1_000_000; // Convert to USDC (6 decimals)
+        setUsdcBalance(balance);
+      } catch (err) {
+        // Token account doesn't exist, balance is 0
+        setUsdcBalance(0);
+      }
+    } catch (err) {
+      console.error('Failed to load USDC balance', err);
+      setUsdcBalance(null);
+    } finally {
+      setLoadingUsdcBalance(false);
+    }
+  }, [publicKey, connection]);
+
   useEffect(() => {
     if (publicKey) {
       void loadBalance();
       void loadHistory();
+      void loadUsdcBalance();
     } else {
       setBalance('0.000000');
       setHistory([]);
+      setUsdcBalance(null);
     }
-  }, [publicKey, loadBalance, loadHistory]);
+  }, [publicKey, loadBalance, loadHistory, loadUsdcBalance]);
+
+  // Redirect to homepage if not authenticated
+  useEffect(() => {
+    if (isAuthenticated === false) {
+      router.push('/');
+    }
+  }, [isAuthenticated, router]);
 
   const handleAddCredits = useCallback(async () => {
     setAddCreditsStatus(null);
@@ -203,7 +251,7 @@ export default function CreditsPage() {
         setAddCreditsStatus(`Payment status: ${confirmJson.status}`);
       }
 
-      await Promise.all([loadBalance(), loadHistory()]);
+      await Promise.all([loadBalance(), loadHistory(), loadUsdcBalance()]);
       notifyCreditsUpdated(); // Trigger header balance update
     } catch (err: any) {
       console.error('Add credits error', err);
@@ -211,7 +259,7 @@ export default function CreditsPage() {
     } finally {
       setAddCreditsBusy(false);
     }
-  }, [publicKey, sendTransaction, usdAmount, connection, loadBalance, loadHistory]);
+  }, [publicKey, sendTransaction, usdAmount, connection, loadBalance, loadHistory, loadUsdcBalance]);
 
   const handleVerify = useCallback(async () => {
     setVerifyStatus(null);
@@ -282,6 +330,22 @@ export default function CreditsPage() {
     return <StatusBadge status="failed" />;
   };
 
+  // Show loading while checking authentication
+  if (isAuthenticated === null) {
+    return (
+      <div className="container mx-auto max-w-5xl py-12 px-4 flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="text-[var(--text-muted)] uppercase tracking-widest text-sm">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render page content if not authenticated (redirect will happen)
+  if (isAuthenticated === false) {
+    return null;
+  }
+
   return (
     <div className="container mx-auto max-w-5xl py-12 px-4 space-y-8">
       <div className="text-center">
@@ -303,6 +367,46 @@ export default function CreditsPage() {
 
       <TerminalPanel title="ADD CREDITS" status="active">
         <div className="space-y-4">
+          <div className="border border-[var(--border-dim)] bg-black bg-opacity-40 p-4 space-y-3">
+            <div className="text-xs text-[var(--text-muted)]">
+              <span className="text-[var(--accent-cyan)]">⚠ Payment Method:</span> All payments must be made in USDC on Solana.
+            </div>
+            
+            {publicKey && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[var(--text-muted)]">Your USDC Balance:</span>
+                <span className="font-mono text-[var(--text-primary)]">
+                  {loadingUsdcBalance ? (
+                    'Loading...'
+                  ) : usdcBalance !== null ? (
+                    `${usdcBalance.toFixed(6)} USDC`
+                  ) : (
+                    'Unable to load'
+                  )}
+                </span>
+              </div>
+            )}
+            
+            {publicKey && usdcBalance !== null && usdcBalance === 0 && (
+              <div className="border border-[var(--accent-red)] bg-[var(--accent-red)] bg-opacity-10 p-3 space-y-2">
+                <div className="text-xs text-[var(--accent-red)] font-semibold">
+                  ⚠ No USDC Balance
+                </div>
+                <div className="text-xs text-[var(--text-muted)]">
+                  You need USDC to purchase credits. Swap SOL or other tokens for USDC:
+                </div>
+                <a
+                  href={JUPITER_SWAP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block text-xs text-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] underline"
+                >
+                  → Swap tokens on Jupiter
+                </a>
+              </div>
+            )}
+          </div>
+
           <DataGrid columns={2} gap="md">
             <TerminalInput
               label="USD Amount"

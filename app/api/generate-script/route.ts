@@ -14,7 +14,7 @@ export const POST = withCreditGuard<{ quality?: string; companyName?: string; co
     // Conservative estimate with buffer for reasoning tokens
     return estimateChatUsdMicros(model, 2000, 3500);  // Increased buffer
   },
-  runWithUsageUsdMicros: async ({ companyName, companyType, product, thread, quality = 'mini', orientation = 'horizontal', duration = '12' }) => {
+  runWithUsageUsdMicros: async ({ companyName, companyType, product, thread, quality = 'mini', orientation = 'horizontal', duration = '12' }, _req, _context) => {
 
     if (!companyName || !companyType || !thread) {
       const res = NextResponse.json(
