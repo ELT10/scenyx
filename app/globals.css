@@ -654,11 +654,11 @@ video {
   border-radius: 0 !important;
   box-shadow: 
     0 0 20px rgba(0, 0, 0, 0.8),
-    0 0 30px rgba(0, 212, 255, 0.2) !important;
+    0 0 20px rgba(0, 212, 255, 0.2) !important;
 }
 
 .wallet-adapter-dropdown-list {
-  background: transparent !important;
+  background: #11162d !important;
 }
 
 .wallet-adapter-dropdown-list-item {
