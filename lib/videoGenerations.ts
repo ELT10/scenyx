@@ -19,8 +19,14 @@ export interface VideoGenerationStatus {
   user_id: string;
   account_id: string;
   hold_id: string | null;
+  model?: string;
+  prompt?: string;
+  seconds?: string;
+  size?: string;
+  orientation?: string;
+  resolution?: string;
   status: 'queued' | 'in_progress' | 'completed' | 'failed';
-  credits_charged: boolean;
+  credits_charged: boolean | null;
   charged_amount_microcredits: bigint | null;
   error_code: string | null;
   error_message: string | null;

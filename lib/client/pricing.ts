@@ -101,3 +101,29 @@ export function getModelDisplayName(quality: string): string {
   return QUALITY_MODEL_MAP[quality] || quality;
 }
 
+// Lip Sync pricing (per second of output video)
+export const LIPSYNC_PRICING_PER_SECOND_USD_MICROS: Record<string, number> = {
+  'bytedance/omni-human': 140000,     // $0.14 per second
+  'wan-video/wan-2.2-s2v': 20000,     // $0.02 per second
+};
+
+export const TTS_PRICING_PER_1K_CHARS_USD_MICROS = 15000;
+
+export function estimateLipSyncCredits(model: string, seconds: number = 10): number {
+  const pricePerSecond = LIPSYNC_PRICING_PER_SECOND_USD_MICROS[model];
+  const priceUsdMicros = pricePerSecond 
+    ? Math.ceil(seconds * pricePerSecond)
+    : 200000; // Default to ~$0.20 for 10 seconds
+  const totalUsd = priceUsdMicros / 1_000_000;
+  const credits = totalUsd / DEFAULT_CREDIT_USD_VALUE;
+  return Math.ceil(credits * 1_000_000) / 1_000_000;
+}
+
+export function estimateTTSCredits(textLength: number): number {
+  const chars = textLength;
+  const costUsdMicros = Math.ceil((chars / 1000) * TTS_PRICING_PER_1K_CHARS_USD_MICROS);
+  const totalUsd = costUsdMicros / 1_000_000;
+  const credits = totalUsd / DEFAULT_CREDIT_USD_VALUE;
+  return Math.ceil(credits * 1_000_000) / 1_000_000;
+}
+

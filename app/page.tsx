@@ -12,7 +12,7 @@ import BackgroundEffects from '@/components/BackgroundEffects';
 import TerminalInput from '@/components/TerminalInput';
 import GlitchText from '@/components/GlitchText';
 import CostEstimate from '@/components/CostEstimate';
-import { estimateVideoCredits, estimateChatCredits } from '@/lib/client/pricing';
+import { estimateVideoCredits, estimateChatCredits, estimateLipSyncCredits, estimateTTSCredits } from '@/lib/client/pricing';
 import { notifyCreditsUpdated } from '@/lib/client/events';
 
 interface VideoStatus {
@@ -41,7 +41,7 @@ export default function Home() {
   const { publicKey } = useWallet();
   
   // Tab state
-  const [activeTab, setActiveTab] = useState<'generate' | 'view' | 'script'>('generate');
+  const [activeTab, setActiveTab] = useState<'generate' | 'view' | 'script' | 'lipsync'>('generate');
 
   // Generate video state
   const [prompt, setPrompt] = useState('');
@@ -66,8 +66,26 @@ export default function Home() {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // View videos state
-  const [savedVideos, setSavedVideos] = useState<VideoStatus[]>([]);
+  const [savedVideos, setSavedVideos] = useState<VideoStatus[]>([]); // legacy local archive (kept for status module)
   const [loadingVideos, setLoadingVideos] = useState(false);
+
+  // DB-backed archive state
+  interface ArchiveItem {
+    video_id: string;
+    model: string;
+    status: 'queued' | 'in_progress' | 'completed' | 'failed';
+    seconds?: string | null;
+    created_at: string;
+    source: 'replicate' | 'openai';
+    expiresAt: string; // ISO
+    remainingHours: number;
+  }
+  const [archiveItems, setArchiveItems] = useState<ArchiveItem[]>([]);
+  const [loadingArchive, setLoadingArchive] = useState(false);
+  const [previews, setPreviews] = useState<Record<string, { url?: string; loading?: boolean; error?: string }>>({});
+  const [archiveFetching, setArchiveFetching] = useState<Record<string, boolean>>({});
+  const archivePollingRef = useRef<NodeJS.Timeout | null>(null);
+  const archiveItemsRef = useRef<ArchiveItem[]>([]);
 
   // Script generator state
   const [companyName, setCompanyName] = useState('');
@@ -84,6 +102,26 @@ export default function Home() {
   const [loadingScript, setLoadingScript] = useState(false);
   const [scriptError, setScriptError] = useState<string | null>(null);
 
+  // Lip sync state
+  const [lipSyncScript, setLipSyncScript] = useState('');
+  const [lipSyncVoice, setLipSyncVoice] = useState<'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer'>('nova');
+  const [lipSyncModel, setLipSyncModel] = useState<'bytedance/omni-human' | 'wan-video/wan-2.2-s2v'>('wan-video/wan-2.2-s2v');
+  const [lipSyncPrompt, setLipSyncPrompt] = useState('');
+  const [lipSyncImageFile, setLipSyncImageFile] = useState<File | null>(null);
+  const [lipSyncImagePreview, setLipSyncImagePreview] = useState<string | null>(null);
+  const [lipSyncAudioFile, setLipSyncAudioFile] = useState<File | null>(null);
+  const [lipSyncAudioUrl, setLipSyncAudioUrl] = useState<string | null>(null);
+  const [generatedAudioUrl, setGeneratedAudioUrl] = useState<string | null>(null);
+  const [loadingTTS, setLoadingTTS] = useState(false);
+  const [loadingLipSync, setLoadingLipSync] = useState(false);
+  const [lipSyncResult, setLipSyncResult] = useState<string | null>(null);
+  const [lipSyncError, setLipSyncError] = useState<string | null>(null);
+  const [lipSyncPredictionId, setLipSyncPredictionId] = useState<string | null>(null);
+  const [lipSyncProgress, setLipSyncProgress] = useState(0);
+  const [audioDuration, setAudioDuration] = useState<number>(10); // Default 10 seconds
+  const lipSyncPollingRef = useRef<NodeJS.Timeout | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   // Cost estimates
   const videoCost = useMemo(() => {
     const seconds = parseInt(videoDuration) || 12;
@@ -97,6 +135,14 @@ export default function Home() {
   const scriptCost = useMemo(() => {
     return estimateChatCredits(scriptQuality, 1500, 2000);
   }, [scriptQuality]);
+
+  const lipSyncCost = useMemo(() => {
+    return estimateLipSyncCredits(lipSyncModel, Math.ceil(audioDuration));
+  }, [lipSyncModel, audioDuration]);
+
+  const ttsCost = useMemo(() => {
+    return estimateTTSCredits(lipSyncScript.length);
+  }, [lipSyncScript]);
 
   // LocalStorage functions
   const saveVideoIdToLocalStorage = (videoId: string, prompt: string) => {
@@ -303,6 +349,9 @@ export default function Home() {
       if (generationPollingRef.current) {
         clearInterval(generationPollingRef.current);
       }
+      if (lipSyncPollingRef.current) {
+        clearInterval(lipSyncPollingRef.current);
+      }
     };
   }, []);
 
@@ -329,9 +378,145 @@ export default function Home() {
 
   useEffect(() => {
     if (activeTab === 'view') {
-      loadSavedVideos();
+      // Load DB-backed archive
+      (async () => {
+        setLoadingArchive(true);
+        try {
+          const res = await fetch('/api/archive/recent?hours=20');
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Failed to load archive');
+          const items: ArchiveItem[] = data.items || [];
+          setArchiveItems(items);
+          archiveItemsRef.current = items;
+          // Immediately refresh each item status without blocking page load
+          const fetchingMap: Record<string, boolean> = {};
+          items.forEach((it) => { fetchingMap[it.video_id] = true; });
+          setArchiveFetching(fetchingMap);
+
+          items.forEach(async (item) => {
+            try {
+              const url = item.source === 'replicate'
+                ? `/api/check-lipsync?prediction_id=${encodeURIComponent(item.video_id)}`
+                : `/api/check-video?video_id=${encodeURIComponent(item.video_id)}`;
+              const resp = await fetch(url);
+              const payload = await resp.json();
+              if (!resp.ok) throw new Error(payload.error || 'Failed to refresh');
+              const rawStatus: string = payload.status || item.status;
+              let mapped: ArchiveItem['status'] = item.status;
+              switch (rawStatus) {
+                case 'queued': mapped = 'queued'; break;
+                case 'in_progress':
+                case 'processing':
+                case 'starting': mapped = 'in_progress'; break;
+                case 'completed':
+                case 'succeeded': mapped = 'completed'; break;
+                case 'failed': mapped = 'failed'; break;
+                default: mapped = item.status;
+              }
+              setArchiveItems((prev) => {
+                const next = prev.map((it) => it.video_id === item.video_id ? { ...it, status: mapped } : it);
+                archiveItemsRef.current = next;
+                return next;
+              });
+              // Store preview URL if available so expired items can still be shown
+              const finalUrl = payload.video_data || payload.video_url || payload.output || undefined;
+              if (finalUrl) {
+                setPreviews((p) => ({ ...p, [item.video_id]: { ...(p[item.video_id] || {}), url: finalUrl } }));
+              }
+            } catch (_) {
+              // ignore single-item refresh errors
+            } finally {
+              setArchiveFetching((prev) => ({ ...prev, [item.video_id]: false }));
+            }
+          });
+        } catch (e: any) {
+          console.error('Archive load failed:', e);
+        } finally {
+          setLoadingArchive(false);
+        }
+      })();
     }
-  }, [activeTab, loadSavedVideos]);
+  }, [activeTab]);
+
+  // Poll archive items that are still generating to update their status
+  const pollArchiveStatuses = useCallback(async () => {
+    const current = archiveItemsRef.current;
+    if (current.length === 0) return;
+    const toPoll = current.filter((i) => i.status === 'queued' || i.status === 'in_progress');
+    if (toPoll.length === 0) return;
+    const updates: Record<string, Partial<ArchiveItem>> = {};
+    // mark fetching
+    toPoll.forEach((i) => setArchiveFetching((prev) => ({ ...prev, [i.video_id]: true })));
+    await Promise.all(
+      toPoll.map(async (item) => {
+        try {
+          const url = item.source === 'replicate'
+            ? `/api/check-lipsync?prediction_id=${encodeURIComponent(item.video_id)}`
+            : `/api/check-video?video_id=${encodeURIComponent(item.video_id)}`;
+          const res = await fetch(url);
+          const data = await res.json();
+          if (!res.ok) return;
+          // Normalize status values to our UI set
+          const rawStatus: string = data.status || item.status;
+          let mapped: ArchiveItem['status'] = item.status;
+          switch (rawStatus) {
+            case 'queued':
+              mapped = 'queued';
+              break;
+            case 'in_progress':
+            case 'processing':
+            case 'starting':
+              mapped = 'in_progress';
+              break;
+            case 'completed':
+            case 'succeeded':
+              mapped = 'completed';
+              break;
+            case 'failed':
+              mapped = 'failed';
+              break;
+            default:
+              // leave as-is to avoid breaking StatusBadge
+              mapped = item.status;
+          }
+          updates[item.video_id] = { status: mapped };
+          // Keep preview url if available
+          const finalUrl = data.video_data || data.video_url || data.output || undefined;
+          if (finalUrl) {
+            setPreviews((p) => ({ ...p, [item.video_id]: { ...(p[item.video_id] || {}), url: finalUrl } }));
+          }
+        } catch (e) {
+          // ignore polling error for single item
+        } finally {
+          setArchiveFetching((prev) => ({ ...prev, [item.video_id]: false }));
+        }
+      })
+    );
+    if (Object.keys(updates).length > 0) {
+      setArchiveItems((prev) => {
+        const next = prev.map((it) => ({ ...it, ...(updates[it.video_id] || {}) }));
+        archiveItemsRef.current = next;
+        return next;
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'view') return;
+    // Initial poll soon after load
+    const t = setTimeout(() => {
+      pollArchiveStatuses();
+    }, 1000);
+    // Interval polling
+    archivePollingRef.current = setInterval(() => {
+      pollArchiveStatuses();
+    }, 7000);
+    return () => {
+      clearTimeout(t);
+      if (archivePollingRef.current) clearInterval(archivePollingRef.current);
+      archivePollingRef.current = null;
+    };
+  }, [activeTab, pollArchiveStatuses]);
 
   const generateThreads = async () => {
     if (!publicKey) {
@@ -447,11 +632,204 @@ export default function Home() {
     setVideoDuration(scriptDuration);
   };
 
+  // Handle image file selection
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setLipSyncImageFile(file);
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLipSyncImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Handle audio file selection
+  const handleAudioFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setLipSyncAudioFile(file);
+      // Create preview URL
+      const url = URL.createObjectURL(file);
+      setLipSyncAudioUrl(url);
+      setGeneratedAudioUrl(null); // Clear generated audio
+      setAudioDuration(10); // Reset to default until we detect actual duration
+    }
+  };
+
+  // Detect audio duration when audio is loaded
+  const handleAudioLoaded = (e: React.SyntheticEvent<HTMLAudioElement>) => {
+    const audio = e.currentTarget;
+    if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+      const durationInSeconds = Math.ceil(audio.duration);
+      setAudioDuration(durationInSeconds);
+      console.log('Audio duration detected:', durationInSeconds, 'seconds');
+    }
+  };
+
+  // Generate TTS audio
+  const generateTTS = async () => {
+    if (!publicKey) {
+      setLipSyncError('WALLET NOT CONNECTED: Please connect your wallet');
+      return;
+    }
+
+    if (!lipSyncScript.trim()) {
+      setLipSyncError('Please enter a script');
+      return;
+    }
+
+    setLoadingTTS(true);
+    setLipSyncError(null);
+
+    try {
+      const response = await fetch('/api/generate-tts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: lipSyncScript,
+          voice: lipSyncVoice,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate audio');
+      }
+
+      setGeneratedAudioUrl(data.audio_data);
+      setLipSyncAudioUrl(data.audio_data);
+      setLipSyncAudioFile(null); // Clear uploaded audio
+      notifyCreditsUpdated();
+    } catch (err: any) {
+      setLipSyncError(err.message || 'Failed to generate audio');
+    } finally {
+      setLoadingTTS(false);
+    }
+  };
+
+  // Poll lip sync progress
+  const pollLipSyncProgress = useCallback(async (predictionId: string) => {
+    try {
+      const response = await fetch(`/api/check-lipsync?prediction_id=${encodeURIComponent(predictionId)}`);
+      if (!response.ok) {
+        throw new Error('Failed to check status');
+      }
+
+      const data = await response.json();
+      
+      if (data.status === 'succeeded') {
+        // Use video_data (base64) for proper downloading, fallback to video_url
+        setLipSyncResult(data.video_data || data.video_url || data.output);
+        setLoadingLipSync(false);
+        setLipSyncProgress(100);
+        notifyCreditsUpdated();
+
+        if (lipSyncPollingRef.current) {
+          clearInterval(lipSyncPollingRef.current);
+          lipSyncPollingRef.current = null;
+        }
+      } else if (data.status === 'failed') {
+        setLipSyncError(data.error || 'Lip sync generation failed');
+        setLoadingLipSync(false);
+        notifyCreditsUpdated();
+
+        if (lipSyncPollingRef.current) {
+          clearInterval(lipSyncPollingRef.current);
+          lipSyncPollingRef.current = null;
+        }
+      } else if (data.status === 'processing') {
+        setLipSyncProgress(50); // Approximate progress
+      }
+    } catch (err: any) {
+      console.error('Error polling lip sync:', err);
+    }
+  }, []);
+
+  // Generate lip sync video
+  const generateLipSync = async () => {
+    if (!publicKey) {
+      setLipSyncError('WALLET NOT CONNECTED: Please connect your wallet');
+      return;
+    }
+
+    if (!lipSyncImagePreview) {
+      setLipSyncError('Please upload an image');
+      return;
+    }
+
+    if (!lipSyncAudioUrl) {
+      setLipSyncError('Please generate or upload audio');
+      return;
+    }
+
+    setLoadingLipSync(true);
+    setLipSyncError(null);
+    setLipSyncResult(null);
+    setLipSyncProgress(0);
+
+    try {
+      const requestBody: any = {
+        imageUrl: lipSyncImagePreview,
+        audioUrl: lipSyncAudioUrl,
+        model: lipSyncModel,
+        audioDuration: Math.ceil(audioDuration), // Send actual audio duration for accurate pricing
+        pollForCompletion: false,
+      };
+      
+      // Add prompt for WAN-Video model
+      if (lipSyncModel === 'wan-video/wan-2.2-s2v' && lipSyncPrompt.trim()) {
+        requestBody.prompt = lipSyncPrompt;
+      }
+      
+      const response = await fetch('/api/generate-lipsync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to start lip sync');
+      }
+
+      setLipSyncPredictionId(data.prediction_id);
+      
+      // Check if video is already completed
+      if (data.status === 'succeeded' && (data.video_data || data.video_url)) {
+        console.log('Lip sync completed immediately!');
+        setLipSyncResult(data.video_data || data.video_url);
+        setLipSyncProgress(100);
+        setLoadingLipSync(false);
+        notifyCreditsUpdated();
+      } else {
+        // Start polling for models that use async processing
+        setLipSyncProgress(10);
+        pollLipSyncProgress(data.prediction_id);
+        lipSyncPollingRef.current = setInterval(() => {
+          pollLipSyncProgress(data.prediction_id);
+        }, 5000);
+      }
+
+    } catch (err: any) {
+      setLipSyncError(err.message || 'Failed to generate lip sync video');
+      setLoadingLipSync(false);
+    }
+  };
+
   return (
     <div className="min-h-screen relative pb-20">
       <BackgroundEffects />
 
-      <div className="relative z-10 container mx-auto px-4 py-8 max-w-7xl">
+      <div className="relative z-10 container mx-auto px-4 py-8 max-w-5xl">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -481,6 +859,12 @@ export default function Home() {
             className={`tab-button ${activeTab === 'generate' ? 'active' : ''}`}
           >
             [ VIDEO GEN ]
+          </button>
+          <button
+            onClick={() => setActiveTab('lipsync')}
+            className={`tab-button ${activeTab === 'lipsync' ? 'active' : ''}`}
+          >
+            [ LIP SYNC ]
           </button>
           <button
             onClick={() => setActiveTab('view')}
@@ -974,6 +1358,256 @@ export default function Home() {
           </motion.div>
         )}
 
+        {activeTab === 'lipsync' && (
+          <motion.div
+            key="lipsync"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="space-y-6"
+          >
+            <TerminalPanel title="LIP SYNC GENERATION MODULE" status="active">
+              <div className="space-y-6">
+                {/* Model Selection */}
+                <div>
+                  <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
+                    {'>'} LIP SYNC MODEL
+                  </label>
+                  <select
+                    value={lipSyncModel}
+                    onChange={(e) => setLipSyncModel(e.target.value as any)}
+                    disabled={loadingLipSync || loadingTTS}
+                    className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
+                  >
+                    <option value="wan-video/wan-2.2-s2v">[ RECOMMENDED ] WAN-Video 2.2 (Best Value!) 💰</option>
+                    <option value="bytedance/omni-human">[ HIGH QUALITY ] Omni-Human by ByteDance</option>
+                  </select>
+                </div>
+
+                {/* Prompt for WAN-Video model */}
+                {lipSyncModel === 'wan-video/wan-2.2-s2v' && (
+                  <div>
+                    <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
+                      {'>'} VIDEO PROMPT (RECOMMENDED)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Default: person talking (try: woman singing, man speaking...)"
+                      value={lipSyncPrompt}
+                      onChange={(e) => setLipSyncPrompt(e.target.value)}
+                      disabled={loadingLipSync || loadingTTS}
+                      className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all placeholder:text-[var(--text-muted)]"
+                    />
+                    <p className="text-xs text-[var(--text-muted)] mt-2">
+                      💡 Describe the action for better results: "woman singing", "man talking", "person speaking", etc.
+                    </p>
+                  </div>
+                )}
+
+                {/* Image Upload */}
+                <div>
+                  <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
+                    {'>'} UPLOAD IMAGE
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageFileChange}
+                    disabled={loadingLipSync || loadingTTS}
+                    className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all file:mr-4 file:py-2 file:px-4 file:border-0 file:text-sm file:font-mono file:bg-[var(--text-primary)] file:text-black hover:file:opacity-80"
+                  />
+                  <p className="text-xs text-[var(--text-muted)] mt-2">
+                    💡 Best results: Front-facing portrait with clear facial features
+                  </p>
+                  {lipSyncImagePreview && (
+                    <div className="mt-4 border border-[var(--border-dim)] p-2 bg-black">
+                      <img src={lipSyncImagePreview} alt="Preview" className="w-full max-h-64 object-contain" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Script Input or Audio Upload */}
+                <div className="border border-[var(--border-dim)] p-6 bg-black bg-opacity-40">
+                  <h3 className="text-sm uppercase tracking-widest text-[var(--text-primary)] mb-4 font-mono">
+                    {'>'} AUDIO SOURCE
+                  </h3>
+                  
+                  {/* Option 1: Generate from Script */}
+                  <div className="space-y-4 mb-6">
+                    <label className="block text-xs uppercase tracking-widest text-[var(--text-muted)] mb-2 font-mono">
+                      OPTION 1: GENERATE FROM SCRIPT
+                    </label>
+                    <TerminalInput
+                      label="SCRIPT TEXT"
+                      placeholder="Enter your script here..."
+                      multiline
+                      rows={4}
+                      value={lipSyncScript}
+                      onChange={(e) => setLipSyncScript(e.target.value)}
+                      disabled={loadingLipSync || loadingTTS}
+                    />
+                    
+                    <div>
+                      <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
+                        {'>'} VOICE SELECTION
+                      </label>
+                      <select
+                        value={lipSyncVoice}
+                        onChange={(e) => setLipSyncVoice(e.target.value as any)}
+                        disabled={loadingLipSync || loadingTTS}
+                        className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
+                      >
+                        <option value="alloy">[ ALLOY ] Neutral</option>
+                        <option value="echo">[ ECHO ] Male</option>
+                        <option value="fable">[ FABLE ] British Male</option>
+                        <option value="onyx">[ ONYX ] Deep Male</option>
+                        <option value="nova">[ NOVA ] Female (Default)</option>
+                        <option value="shimmer">[ SHIMMER ] Soft Female</option>
+                      </select>
+                    </div>
+
+                    <CostEstimate 
+                      credits={ttsCost} 
+                      operation="Text-to-Speech" 
+                    />
+
+                    <GlowButton
+                      onClick={generateTTS}
+                      disabled={loadingTTS || !lipSyncScript.trim() || loadingLipSync}
+                      loading={loadingTTS}
+                      className="w-full"
+                    >
+                      {loadingTTS ? 'GENERATING AUDIO...' : '[ GENERATE VOICEOVER ]'}
+                    </GlowButton>
+                  </div>
+
+                  <div className="border-t border-[var(--border-dim)] pt-6">
+                    <label className="block text-xs uppercase tracking-widest text-[var(--text-muted)] mb-2 font-mono">
+                      OPTION 2: UPLOAD AUDIO FILE
+                    </label>
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      onChange={handleAudioFileChange}
+                      disabled={loadingLipSync || loadingTTS}
+                      className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all file:mr-4 file:py-2 file:px-4 file:border-0 file:text-sm file:font-mono file:bg-[var(--text-primary)] file:text-black hover:file:opacity-80"
+                    />
+                  </div>
+
+                  {/* Audio Preview */}
+                  {lipSyncAudioUrl && (
+                    <div className="mt-4 border border-[var(--border-primary)] p-4 bg-black">
+                      <div className="flex justify-between items-center mb-2">
+                        <div className="text-xs uppercase tracking-wide text-[var(--text-primary)]">
+                          AUDIO PREVIEW:
+                        </div>
+                        <div className="text-xs text-[var(--accent-cyan)] font-mono">
+                          DURATION: {audioDuration}s
+                        </div>
+                      </div>
+                      <audio 
+                        ref={audioRef}
+                        src={lipSyncAudioUrl} 
+                        controls 
+                        className="w-full"
+                        onLoadedMetadata={handleAudioLoaded}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Generate Lip Sync Button */}
+                <div className="border border-[var(--border-dim)] p-4 bg-black bg-opacity-40">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
+                      ESTIMATED COST:
+                    </span>
+                    <span className="text-sm font-bold text-[var(--accent-cyan)] font-mono">
+                      {lipSyncCost.toFixed(3)} CREDITS
+                    </span>
+                  </div>
+                </div>
+
+                <GlowButton
+                  onClick={generateLipSync}
+                  disabled={loadingLipSync || !lipSyncImagePreview || !lipSyncAudioUrl}
+                  loading={loadingLipSync}
+                  className="w-full"
+                >
+                  {loadingLipSync ? `GENERATING... ${lipSyncProgress}%` : '[ GENERATE LIP SYNC VIDEO ]'}
+                </GlowButton>
+
+                {/* Progress Display */}
+                {loadingLipSync && lipSyncPredictionId && (
+                  <div className="border border-[var(--border-primary)] bg-[var(--text-primary)] bg-opacity-5 p-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <StatusBadge status="in_progress" />
+                      <span className="text-[#000000] font-mono text-sm">
+                        {lipSyncProgress}%
+                      </span>
+                    </div>
+                    <ProgressBar progress={lipSyncProgress} label="LIP SYNC PROGRESS" showPercentage={false} />
+                    <div className="mt-3 text-[12px] text-[#222222] font-mono">
+                      PREDICTION ID: {lipSyncPredictionId}
+                    </div>
+                  </div>
+                )}
+
+                {/* Error Display */}
+                {lipSyncError && (
+                  <div className="border border-[var(--accent-red)] bg-[var(--accent-red)] bg-opacity-10 p-4">
+                    <div className="flex items-start gap-3">
+                      <span className="text-[#000] text-xl">⚠</span>
+                      <div>
+                        <div className="text-[#000] font-bold text-sm uppercase mb-1">ERROR</div>
+                        <div className="text-[#000] text-xs">{lipSyncError}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Result Display */}
+                {lipSyncResult && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                  >
+                    <h3 className="text-sm uppercase tracking-widest text-[var(--text-primary)] mb-4 font-mono">
+                      {'>'} GENERATED LIP SYNC VIDEO
+                    </h3>
+                    <div className="border border-[var(--border-primary)] p-2 bg-black">
+                      <video
+                        src={lipSyncResult}
+                        controls
+                        className="w-full"
+                        autoPlay
+                      />
+                    </div>
+                    <div className="flex gap-3 mt-4">
+                      <a
+                        href={lipSyncResult}
+                        download="lipsync-video.mp4"
+                        className="flex-1 text-center border border-[var(--border-primary)] text-[var(--text-primary)] px-6 py-3 text-sm uppercase tracking-wider hover:bg-[var(--accent-cyan)] hover:bg-opacity-10 hover:border-[var(--accent-cyan)] hover:text-[#000000] transition-all"
+                      >
+                        [ DOWNLOAD ]
+                      </a>
+                      <button
+                        onClick={() => {
+                          setLipSyncResult(null);
+                          setLipSyncProgress(0);
+                        }}
+                        className="flex-1 border border-[var(--border-dim)] text-[var(--text-muted)] px-6 py-3 text-sm uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-all"
+                      >
+                        [ NEW GENERATION ]
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            </TerminalPanel>
+          </motion.div>
+        )}
+
         {activeTab === 'view' && (
           <motion.div
             key="view"
@@ -981,119 +1615,105 @@ export default function Home() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
           >
-            <TerminalPanel title="VIDEO ARCHIVE DATABASE" status="active">
-              {loadingVideos ? (
-                <div className="text-center py-12">
-                  <div className="loading-bar w-64 mx-auto"></div>
-                  <p className="mt-4 text-[var(--text-muted)] text-sm uppercase tracking-wide">
-                    LOADING ARCHIVE...
-                  </p>
+            <TerminalPanel title="RECENT GENERATIONS" status="active">
+              <div className="space-y-4">
+                <div className="border border-[var(--border-dim)] bg-black bg-opacity-60 p-3 text-xs text-[var(--text-muted)]">
+                  Lip sync videos are only available for ~1 hour, all other videos for ~24 hours. Download them before they expire.
                 </div>
-              ) : savedVideos.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="text-6xl text-[var(--text-muted)] mb-4">⊗</div>
-                  <h3 className="text-lg uppercase text-[var(--text-primary)] mb-2 tracking-wider">
-                    NO ARCHIVED VIDEOS
-                  </h3>
-                  <p className="text-[var(--text-muted)] text-sm">
-                    Generate a video to populate the archive
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-sm uppercase tracking-widest text-[var(--text-primary)] font-mono">
-                      {'>'} ARCHIVE ENTRIES: {savedVideos.length}
-                    </h3>
-                    <button
-                      onClick={loadSavedVideos}
-                      className="border border-[var(--border-dim)] text-[var(--text-muted)] px-4 py-2 text-xs uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-all"
-                    >
-                      [ REFRESH ]
-                    </button>
+                {loadingArchive ? (
+                  <div className="text-center py-12">
+                    <div className="loading-bar w-64 mx-auto"></div>
+                    <p className="mt-4 text-[var(--text-muted)] text-sm uppercase tracking-wide">
+                      LOADING RECENT GENERATIONS...
+                    </p>
                   </div>
-                  {savedVideos.map((video) => (
-                    <div
-                      key={video.video_id}
-                      className="border border-[var(--border-dim)] bg-black bg-opacity-60 p-6 hover:border-[var(--border-primary)] transition-all"
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <StatusBadge status={video.status} />
-                        {video.progress !== undefined && (
-                          <span className="text-sm font-mono text-[var(--text-primary)]">
-                            {video.progress}%
-                          </span>
-                        )}
-                      </div>
+                ) : archiveItems.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="text-6xl text-[var(--text-muted)] mb-4">⊗</div>
+                    <h3 className="text-lg uppercase text-[var(--text-primary)] mb-2 tracking-wider">
+                      NO RECENT GENERATIONS
+                    </h3>
+                    <p className="text-[var(--text-muted)] text-sm">
+                      Generate something to see it here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {archiveItems.map((item) => {
+                      const preview = previews[item.video_id] || {};
+                      const nowMs = Date.now();
+                      const expMs = Date.parse(item.expiresAt);
+                      const isExpired = expMs <= nowMs;
+                      const timeLeftH = Math.max(0, Math.floor((expMs - nowMs) / 3600_000));
+                      return (
+                        <div key={item.video_id} className={`border ${isExpired ? 'border-[var(--border-dim)] opacity-70' : 'border-[var(--border-dim)] hover:border-[var(--border-primary)]'} bg-black bg-opacity-60 p-4 transition-all`}>
+                      <div className="flex items-start justify-between mb-2">
+                        <StatusBadge status={(archiveFetching[item.video_id] ? 'fetching' : item.status) as any} />
+                            <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+                              {item.model}
+                            </div>
+                          </div>
 
-                      <div className="text-xs font-mono text-[var(--text-muted)] mb-4 break-all">
-                        ID: {video.video_id}
-                      </div>
+                          <div className="text-[10px] text-[var(--text-muted)] mb-2 flex justify-between">
+                            <span>Created: {new Date(item.created_at).toLocaleString()}</span>
+                            <span>{isExpired ? 'Expired' : `Expires in ${timeLeftH === 0 ? '<1' : timeLeftH}h`}</span>
+                          </div>
 
-                      {video.progress !== undefined && video.status === 'in_progress' && (
-                        <ProgressBar progress={video.progress} label="Generation Progress" />
-                      )}
+                          <div className="relative border border-[var(--border-dim)] bg-black">
+                            {preview.url ? (
+                              <video src={preview.url} controls className="w-full" />
+                            ) : (
+                              <div className="p-6 text-center text-[var(--text-muted)] text-xs">{archiveFetching[item.video_id] ? 'Fetching…' : (item.status === 'completed' ? 'Preview not loaded' : 'Generating...')}</div>
+                            )}
+                            {item.status !== 'completed' && !preview.url && (
+                              <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+                                <div className="loading-bar w-40"></div>
+                              </div>
+                            )}
+                          </div>
 
-                      <div className="grid grid-cols-2 gap-3 text-xs mt-4">
-                        {video.model && (
-                          <div>
-                            <span className="text-[var(--text-muted)]">MODEL:</span>
-                            <span className="text-[var(--text-primary)] ml-2">{video.model}</span>
+                          <div className="mt-3 flex gap-2">
+                            <button
+                              onClick={async () => {
+                                if (isExpired) return;
+                                setPreviews((p) => ({ ...p, [item.video_id]: { ...p[item.video_id], loading: true, error: undefined } }));
+                                try {
+                                  const url = item.source === 'replicate'
+                                    ? `/api/check-lipsync?prediction_id=${encodeURIComponent(item.video_id)}`
+                                    : `/api/check-video?video_id=${encodeURIComponent(item.video_id)}`;
+                                  const res = await fetch(url);
+                                  const data = await res.json();
+                                  if (!res.ok) throw new Error(data.error || 'Failed to fetch preview');
+                                  const finalUrl = data.video_data || data.video_url || data.output || undefined;
+                                  setPreviews((p) => ({ ...p, [item.video_id]: { url: finalUrl, loading: false } }));
+                                } catch (e: any) {
+                                  setPreviews((p) => ({ ...p, [item.video_id]: { loading: false, error: e.message || 'Failed to load' } }));
+                                }
+                              }}
+                              disabled={(item.status !== 'completed' && !preview.url) || isExpired && !preview.url || preview.loading}
+                              className="flex-1 text-center border border-[var(--border-dim)] text-[var(--text-muted)] px-3 py-2 text-[10px] uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] disabled:opacity-40"
+                            >
+                              {preview.loading ? 'LOADING…' : '[ VIEW ]'}
+                            </button>
+                            <a
+                              href={(preview.url || '')}
+                              download={preview.url ? `video_${item.video_id}.mp4` : undefined}
+                              onClick={(e) => { if (!preview.url) e.preventDefault(); }}
+                              className="flex-1 text-center border border-[var(--border-dim)] text-[var(--text-muted)] px-3 py-2 text-[10px] uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] disabled:opacity-40"
+                              aria-disabled={!preview.url}
+                            >
+                              [ DOWNLOAD ]
+                            </a>
                           </div>
-                        )}
-                        {video.size && (
-                          <div>
-                            <span className="text-[var(--text-muted)]">SIZE:</span>
-                            <span className="text-[var(--text-primary)] ml-2">{video.size}</span>
-                          </div>
-                        )}
-                        {video.seconds && (
-                          <div>
-                            <span className="text-[var(--text-muted)]">DURATION:</span>
-                            <span className="text-[var(--text-primary)] ml-2">{video.seconds}s</span>
-                          </div>
-                        )}
-                        {video.created_at && (
-                          <div>
-                            <span className="text-[var(--text-muted)]">CREATED:</span>
-                            <span className="text-[var(--text-primary)] ml-2">
-                              {new Date(video.created_at * 1000).toLocaleDateString()}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {video.status === 'completed' && video.video_data && (
-                        <div className="mt-4">
-                          <div className="border border-[var(--border-primary)] p-2 bg-black mb-3">
-                            <video
-                              src={video.video_data}
-                              controls
-                              className="w-full"
-                            />
-                          </div>
-                          <a
-                            href={video.video_data}
-                            download={`video_${video.video_id}.mp4`}
-                            className="block w-full text-center border border-[var(--border-primary)] text-[var(--text-primary)] px-6 py-3 text-sm uppercase tracking-wider hover:bg-[var(--text-primary)] hover:bg-opacity-10 transition-all"
-                          >
-                            [ DOWNLOAD VIDEO ]
-                          </a>
+                          {preview.error && (
+                            <div className="mt-2 text-[10px] text-[var(--accent-red)]">{preview.error}</div>
+                          )}
                         </div>
-                      )}
-
-                      {video.error && (
-                        <div className="mt-4 border border-[var(--accent-red)] bg-[var(--accent-red)] bg-opacity-10 p-3 text-xs">
-                          <div className="text-[var(--accent-red)] font-bold mb-1">
-                            ERROR: {video.error.code}
-                          </div>
-                          <div className="text-[var(--accent-red)]">{video.error.message}</div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </TerminalPanel>
           </motion.div>
         )}
@@ -1120,6 +1740,14 @@ export default function Home() {
             <div className="flex items-start gap-2">
               <span className="text-[var(--text-primary)]">{'>'}</span>
               <span>All generated videos are stored locally and accessible via the Archive</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-[var(--text-primary)]">{'>'}</span>
+              <span>Use Lip Sync to animate portraits with AI-generated voiceovers or uploaded audio files</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-[var(--text-primary)]">{'>'}</span>
+              <span>Configure Replicate API key as REPLICATE_API_TOKEN in .env to enable Lip Sync features</span>
             </div>
           </div>
         </TerminalPanel>

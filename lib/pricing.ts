@@ -42,4 +42,24 @@ export function estimateVideoUsdMicros(model: string, seconds: number, resolutio
   return Math.ceil(seconds * pricePerSecond);
 }
 
+// Lip Sync pricing (per second of output video)
+export const LIPSYNC_PRICING_PER_SECOND_USD_MICROS: Record<string, number> = {
+  'bytedance/omni-human': 140000,     // $0.14 per second
+  'wan-video/wan-2.2-s2v': 20000,     // $0.02 per second
+};
+
+// Text-to-Speech pricing (OpenAI TTS)
+export const TTS_PRICING_PER_1K_CHARS_USD_MICROS = 15000; // $0.015 per 1k chars
+
+export function estimateLipSyncUsdMicros(model: string, seconds: number = 10): number {
+  const pricePerSecond = LIPSYNC_PRICING_PER_SECOND_USD_MICROS[model];
+  if (!pricePerSecond) return 200000; // Default to ~$0.20 for 10 seconds
+  return Math.ceil(seconds * pricePerSecond);
+}
+
+export function estimateTTSUsdMicros(textLength: number): number {
+  const chars = textLength;
+  return Math.ceil((chars / 1000) * TTS_PRICING_PER_1K_CHARS_USD_MICROS);
+}
+
 

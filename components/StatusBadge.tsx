@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 
 interface StatusBadgeProps {
-  status: 'queued' | 'in_progress' | 'completed' | 'failed';
+  status: 'queued' | 'in_progress' | 'completed' | 'failed' | 'fetching';
   showDot?: boolean;
 }
 
@@ -32,6 +32,12 @@ export default function StatusBadge({ status, showDot = true }: StatusBadgeProps
       border: 'border-[var(--accent-red)]',
       bg: 'bg-[var(--accent-red)]',
       text: 'FAILED'
+    },
+    fetching: {
+      color: 'text-[var(--accent-cyan)]',
+      border: 'border-[var(--accent-cyan)]',
+      bg: 'bg-[var(--accent-cyan)]',
+      text: 'FETCHING'
     }
   };
 
