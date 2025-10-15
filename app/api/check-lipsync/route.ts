@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 import { NextRequest, NextResponse } from 'next/server';
 import { finalizeVideoGeneration, getVideoGeneration } from '@/lib/videoGenerations';
 import { estimateLipSyncUsdMicros } from '@/lib/pricing';
