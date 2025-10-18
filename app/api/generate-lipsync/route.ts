@@ -71,6 +71,24 @@ export const POST = withCreditGuard<{
       if (!replicateResponse.ok) {
         const errorText = await replicateResponse.text();
         console.error('Replicate API error:', replicateResponse.status, errorText);
+
+        // Map payload-too-large errors to a friendly message for the client
+        const lowerError = (errorText || '').toLowerCase();
+        const isPayloadTooLarge =
+          replicateResponse.status === 413 ||
+          lowerError.includes('payload too large') ||
+          lowerError.includes('content too large') ||
+          lowerError.includes('request entity too large') ||
+          lowerError.includes('function_payload_too_large');
+
+        if (isPayloadTooLarge) {
+          const res = NextResponse.json(
+            { error: 'image size too high' },
+            { status: 400 }
+          );
+          return { response: res, usageUsdMicros: 0 };
+        }
+
         throw new Error(`Replicate API failed (${replicateResponse.status}): ${errorText}`);
       }
 

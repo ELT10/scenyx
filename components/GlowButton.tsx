@@ -46,7 +46,7 @@ export default function GlowButton({
         relative
         ${colorClasses.border}
         ${colorClasses.text}
-        ${!disabled && colorClasses.glow}
+        ${!disabled ? colorClasses.glow : ''}
         ${className}
       `}
       disabled={disabled || loading}

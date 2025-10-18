@@ -115,10 +115,10 @@ export default function WalletControls() {
   }, [publicKey, signMessage]);
 
   return (
-    <div className="flex items-center gap-3">
-      <WalletMultiButton />
-      {status && <span className="text-[var(--text-muted)] text-xs uppercase tracking-wider">{status}</span>}
-    </div>
+    <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end bg-black/60 py-1 rounded">
+       {status && <span className="text-[var(--text-muted)] text-[11px] sm:text-xs uppercase tracking-wider max-w-[180px] text-right sm:text-left leading-tight">{status}</span>}
+       <WalletMultiButton />
+      </div>
   );
 }
 

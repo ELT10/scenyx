@@ -18,7 +18,7 @@ export default function ProgressBar({
       {label && (
         <div className="flex items-center justify-between mb-2">
           {showPercentage && (
-            <span className="text-xs font-mono text-[var(--text-primary)] glow-text">
+            <span className="text-[11px] sm:text-xs font-mono text-[var(--text-primary)] glow-text">
               {progress}%
             </span>
           )}

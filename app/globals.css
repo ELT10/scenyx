@@ -560,32 +560,96 @@ video {
 }
 
 /* Tab styles */
-.tab-button {
-  background: transparent;
-  border: 1px solid var(--border-dim);
-  color: var(--text-muted);
-  padding: 12px 24px;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  cursor: pointer;
-  transition: all 0.3s ease;
+
+.tab-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 6px 14px;
+  scrollbar-width: thin;
+  mask-image: linear-gradient(90deg, transparent 0, black 16px, black calc(100% - 16px), transparent 100%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0px;
+  background: rgba(10, 10, 15, 0.5);
   position: relative;
 }
 
+.tab-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.tab-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tab-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+}
+
+.tab-button {
+  background: linear-gradient(135deg, rgba(30, 32, 60, 0.8), rgba(20, 20, 30, 0.8));
+  border: 1px solid var(--border-dim);
+  color: var(--text-muted);
+  padding: 10px 18px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  position: relative;
+  border-radius: 10px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.tab-button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
 .tab-button.active {
-  border-color: var(--border-primary);
+  border-color: var(--accent-cyan);
   color: var(--text-secondary);
-  background: #2f3358a3;
-  box-shadow: 
-    0 0 10px rgba(255, 255, 255, 0.3),
-    inset 0 0 10px rgba(255, 255, 255, 0.1);
+  background: rgba(0, 212, 255, 0.12);
+  box-shadow:
+    0 0 12px rgba(0, 212, 255, 0.25),
+    inset 0 0 12px rgba(0, 212, 255, 0.12);
+}
+
+.tab-button.active::after {
+  opacity: 1;
 }
 
 .tab-button:not(.active):hover {
   border-color: var(--text-secondary);
   color: var(--text-secondary);
+  box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.08);
+}
+
+.tab-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 22px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.tab-fade-left {
+  left: 0;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0));
+}
+
+.tab-fade-right {
+  right: 0;
+  background: linear-gradient(270deg, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0));
 }
 
 /* Noise texture overlay */

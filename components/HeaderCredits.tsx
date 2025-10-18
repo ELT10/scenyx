@@ -80,9 +80,9 @@ export default function HeaderCredits() {
   if (loading && isAuthenticated === null) {
     return (
       <>
-        <span className="text-[var(--text-muted)]">|</span>
-        <div className="flex items-center gap-3">
-          <span className="text-[var(--text-muted)] uppercase tracking-widest text-[9px]">Credits</span>
+        <span className="hidden sm:inline text-[var(--text-muted)]">|</span>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="hidden sm:inline text-[var(--text-muted)] uppercase tracking-widest text-[9px]">Credits</span>
           <span className="text-[var(--text-muted)] text-xs font-semibold animate-pulse">…</span>
         </div>
       </>
@@ -93,9 +93,9 @@ export default function HeaderCredits() {
   if (loading && isAuthenticated === false) {
     return (
       <>
-        <span className="text-[var(--text-muted)] opacity-50 transition-opacity duration-300">|</span>
-        <div className="flex items-center gap-3 opacity-50 transition-opacity duration-300">
-          <span className="text-[var(--text-muted)] uppercase tracking-widest text-[9px]">Credits</span>
+        <span className="hidden sm:inline text-[var(--text-muted)] opacity-50 transition-opacity duration-300">|</span>
+        <div className="flex items-center gap-2 sm:gap-3 opacity-50 transition-opacity duration-300">
+          <span className="hidden sm:inline text-[var(--text-muted)] uppercase tracking-widest text-[9px]">Credits</span>
           <span className="text-[var(--text-muted)] text-xs font-semibold animate-pulse">…</span>
         </div>
       </>
@@ -106,13 +106,12 @@ export default function HeaderCredits() {
 
   return (
     <>
-      <span className="text-[var(--text-muted)]">|</span>
-      <div className="flex items-center gap-3">
-        <span className="text-[var(--text-muted)] uppercase tracking-widest text-[9px]">Credits</span>
-        <span className="text-[var(--accent-cyan)] text-xs font-semibold">{display}</span>
+      <div className="flex items-center gap-1.5 sm:gap-3 bg-black/60 border border-[var(--border-dim)] px-2 sm:px-3 py-2 rounded">
+        <span className="hidden sm:inline text-[var(--text-muted)] uppercase tracking-widest text-[9px]">Credits</span>
+        <span className="text-[var(--accent-cyan)] text-xs font-semibold min-w-[52px] text-right tracking-wide">{display}</span>
         <Link
           href="/credits"
-          className="border border-[var(--border-dim)] px-3 py-1 text-[9px] uppercase tracking-widest text-[var(--text-muted)] hover:border-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] transition"
+          className="border border-[var(--border-dim)] px-2 py-1 text-[8px] sm:text-[9px] uppercase tracking-widest text-[var(--text-muted)] hover:border-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] transition"
         >
           Manage
         </Link>

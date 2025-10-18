@@ -42,6 +42,13 @@ export default function Home() {
   
   // Tab state
   const [activeTab, setActiveTab] = useState<'generate' | 'view' | 'script' | 'lipsync'>('generate');
+  const tabScrollRef = useRef<HTMLDivElement | null>(null);
+  const tabRefs = {
+    script: useRef<HTMLButtonElement | null>(null),
+    generate: useRef<HTMLButtonElement | null>(null),
+    lipsync: useRef<HTMLButtonElement | null>(null),
+    view: useRef<HTMLButtonElement | null>(null),
+  } as const;
 
   // Generate video state
   const [prompt, setPrompt] = useState('');
@@ -332,6 +339,24 @@ export default function Home() {
       checkVideoStatus();
     }, 5000);
   };
+
+  useEffect(() => {
+    const scrollContainer = tabScrollRef.current;
+    if (!scrollContainer) return;
+
+    const activeEl = tabRefs[activeTab].current;
+    if (!activeEl) return;
+
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const activeRect = activeEl.getBoundingClientRect();
+    const offset = activeRect.left - containerRect.left;
+    const scroll = offset - (containerRect.width / 2 - activeRect.width / 2);
+
+    scrollContainer.scrollTo({
+      left: scrollContainer.scrollLeft + scroll,
+      behavior: 'smooth',
+    });
+  }, [activeTab]);
 
   useEffect(() => {
     if (autoPolling && videoStatus) {
@@ -826,52 +851,60 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen relative pb-20">
+    <div className="min-h-screen relative pb-24 sm:pb-20">
       <BackgroundEffects />
 
-      <div className="relative z-10 container mx-auto px-4 py-8 max-w-5xl">
+      <div className="relative z-10 container mx-auto px-3 sm:px-4 py-8 max-w-5xl">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-10"
+          className="text-center mb-4 sm:mb-7 sm:mt-4"
         >
           {/* <GlitchText className="text-4xl font-black mb-4">
             SCENYX
           </GlitchText> */}
-          <div className="flex items-center justify-center gap-2 text-sm uppercase tracking-[0.3em]">
-            <span className="text-[var(--accent-cyan)]">AI POWERED</span>
-            <span className="text-[var(--text-muted)]">//</span>
+          <div className="flex items-center justify-center gap-2 text-[12px] sm:text-sm uppercase tracking-[0.3em]">
+            <span className="text-[var(--accent-cyan)] hidden sm:block">AI POWERED</span>
+            <span className="text-[var(--text-muted)] hidden sm:block">//</span>
             <span className="text-[var(--text-primary)]">VIDEO GENERATION PLATFORM</span>
           </div>
         </motion.div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-8 justify-center">
-          <button
-            onClick={() => setActiveTab('script')}
-            className={`tab-button ${activeTab === 'script' ? 'active' : ''}`}
-          >
-            [ SCRIPT GEN ]
-          </button>
-          <button
-            onClick={() => setActiveTab('generate')}
-            className={`tab-button ${activeTab === 'generate' ? 'active' : ''}`}
-          >
-            [ VIDEO GEN ]
-          </button>
-          <button
-            onClick={() => setActiveTab('lipsync')}
-            className={`tab-button ${activeTab === 'lipsync' ? 'active' : ''}`}
-          >
-            [ LIP SYNC ]
-          </button>
-          <button
-            onClick={() => setActiveTab('view')}
-            className={`tab-button ${activeTab === 'view' ? 'active' : ''}`}
-          >
-            [ ARCHIVE ]
-          </button>
+        <div className="relative mb-8">
+          <div className="tab-fade tab-fade-left"></div>
+          <div className="tab-fade tab-fade-right"></div>
+          <div className="tab-scroll" ref={tabScrollRef}>
+            <button
+              onClick={() => setActiveTab('script')}
+              ref={tabRefs.script}
+              className={`tab-button ${activeTab === 'script' ? 'active' : ''}`}
+            >
+              [ SCRIPT GEN ]
+            </button>
+            <button
+              onClick={() => setActiveTab('generate')}
+              ref={tabRefs.generate}
+              className={`tab-button ${activeTab === 'generate' ? 'active' : ''}`}
+            >
+              [ VIDEO GEN ]
+            </button>
+            <button
+              onClick={() => setActiveTab('lipsync')}
+              ref={tabRefs.lipsync}
+              className={`tab-button ${activeTab === 'lipsync' ? 'active' : ''}`}
+            >
+              [ LIP SYNC ]
+            </button>
+            <button
+              onClick={() => setActiveTab('view')}
+              ref={tabRefs.view}
+              className={`tab-button ${activeTab === 'view' ? 'active' : ''}`}
+            >
+              [ ARCHIVE ]
+            </button>
+          </div>
         </div>
 
         {/* Tab Content */}
@@ -985,7 +1018,7 @@ export default function Home() {
                   />
                 )}
 
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
                   {!customThread.trim() ? (
                     <GlowButton
                       onClick={generateThreads}
@@ -1248,11 +1281,11 @@ export default function Home() {
                         autoPlay
                       />
                     </div>
-                    <div className="flex gap-3 mt-4">
+                    <div className="flex flex-col sm:flex-row gap-3 mt-4">
                       <a
                         href={videoUrl}
                         download
-                        className="flex-1 text-center border border-[var(--border-primary)] text-[var(--text-primary)] px-6 py-3 text-sm uppercase tracking-wider hover:bg-[var(--accent-cyan)] hover:bg-opacity-10 hover:border-[var(--accent-cyan)] hover:text-[#000000] transition-all"
+                        className="flex-1 text-center border border-[var(--border-primary)] text-[var(--text-primary)] px-4 sm:px-6 py-3 text-sm uppercase tracking-wider hover:bg-[var(--accent-cyan)] hover:bg-opacity-10 hover:border-[var(--accent-cyan)] hover:text-[#000000] transition-all"
                       >
                         [ DOWNLOAD ]
                       </a>
@@ -1261,7 +1294,7 @@ export default function Home() {
                           setVideoUrl(null);
                           setPrompt('');
                         }}
-                        className="flex-1 border border-[var(--border-dim)] text-[var(--text-muted)] px-6 py-3 text-sm uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-all"
+                        className="flex-1 border border-[var(--border-dim)] text-[var(--text-muted)] px-4 sm:px-6 py-3 text-sm uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-all"
                       >
                         [ NEW GENERATION ]
                       </button>
@@ -1285,7 +1318,7 @@ export default function Home() {
                   disabled={checkingStatus || autoPolling}
                 />
 
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
                   <GlowButton
                     onClick={checkVideoStatus}
                     disabled={checkingStatus || autoPolling || !videoId.trim()}
@@ -1313,7 +1346,7 @@ export default function Home() {
                 )}
 
                 {videoStatus && (
-                  <div className="border border-[var(--border-dim)] bg-black bg-opacity-60 p-4 space-y-3">
+                <div className="border border-[var(--border-dim)] bg-black bg-opacity-60 p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-[var(--text-muted)] uppercase">Status:</span>
                       <StatusBadge status={videoStatus.status} showDot={true} />
@@ -1321,7 +1354,7 @@ export default function Home() {
                     {videoStatus.progress !== undefined && (
                       <ProgressBar progress={videoStatus.progress} label="Progress" />
                     )}
-                    <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div>
                         <span className="text-[var(--text-muted)]">ID:</span>
                         <span className="text-[var(--text-primary)] ml-2 font-mono break-all">{videoStatus.video_id}</span>
@@ -1427,7 +1460,7 @@ export default function Home() {
                 </div>
 
                 {/* Script Input or Audio Upload */}
-                <div className="border border-[var(--border-dim)] p-6 bg-black bg-opacity-40">
+                <div className="border border-[var(--border-dim)] p-4 sm:p-6 bg-black bg-opacity-40">
                   <h3 className="text-sm uppercase tracking-widest text-[var(--text-primary)] mb-4 font-mono">
                     {'>'} AUDIO SOURCE
                   </h3>
@@ -1518,7 +1551,7 @@ export default function Home() {
 
                 {/* Generate Lip Sync Button */}
                 <div className="border border-[var(--border-dim)] p-4 bg-black bg-opacity-40">
-                  <div className="flex justify-between items-center">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <span className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
                       ESTIMATED COST:
                     </span>
@@ -1583,11 +1616,11 @@ export default function Home() {
                         autoPlay
                       />
                     </div>
-                    <div className="flex gap-3 mt-4">
+                    <div className="flex flex-col sm:flex-row gap-3 mt-4">
                       <a
                         href={lipSyncResult}
                         download="lipsync-video.mp4"
-                        className="flex-1 text-center border border-[var(--border-primary)] text-[var(--text-primary)] px-6 py-3 text-sm uppercase tracking-wider hover:bg-[var(--accent-cyan)] hover:bg-opacity-10 hover:border-[var(--accent-cyan)] hover:text-[#000000] transition-all"
+                        className="flex-1 text-center border border-[var(--border-primary)] text-[var(--text-primary)] px-4 sm:px-6 py-3 text-sm uppercase tracking-wider hover:bg-[var(--accent-cyan)] hover:bg-opacity-10 hover:border-[var(--accent-cyan)] hover:text-[#000000] transition-all"
                       >
                         [ DOWNLOAD ]
                       </a>
@@ -1596,7 +1629,7 @@ export default function Home() {
                           setLipSyncResult(null);
                           setLipSyncProgress(0);
                         }}
-                        className="flex-1 border border-[var(--border-dim)] text-[var(--text-muted)] px-6 py-3 text-sm uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-all"
+                        className="flex-1 border border-[var(--border-dim)] text-[var(--text-muted)] px-4 sm:px-6 py-3 text-sm uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-all"
                       >
                         [ NEW GENERATION ]
                       </button>
@@ -1691,7 +1724,7 @@ export default function Home() {
                                 }
                               }}
                               disabled={(item.status !== 'completed' && !preview.url) || isExpired && !preview.url || preview.loading}
-                              className="flex-1 text-center border border-[var(--border-dim)] text-[var(--text-muted)] px-3 py-2 text-[10px] uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] disabled:opacity-40"
+                            className="flex-1 text-center border border-[var(--border-dim)] text-[var(--text-muted)] px-2.5 sm:px-3 py-2 text-[10px] uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] disabled:opacity-40"
                             >
                               {preview.loading ? 'LOADING…' : '[ VIEW ]'}
                             </button>
@@ -1699,7 +1732,7 @@ export default function Home() {
                               href={(preview.url || '')}
                               download={preview.url ? `video_${item.video_id}.mp4` : undefined}
                               onClick={(e) => { if (!preview.url) e.preventDefault(); }}
-                              className="flex-1 text-center border border-[var(--border-dim)] text-[var(--text-muted)] px-3 py-2 text-[10px] uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] disabled:opacity-40"
+                              className="flex-1 text-center border border-[var(--border-dim)] text-[var(--text-muted)] px-2.5 sm:px-3 py-2 text-[10px] uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] disabled:opacity-40"
                               aria-disabled={!preview.url}
                             >
                               [ DOWNLOAD ]

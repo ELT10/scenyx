@@ -29,36 +29,33 @@ export default function RootLayout({
       <body className="antialiased bg-black text-[var(--text-primary)] font-mono overflow-x-hidden">
         <WalletProvider>
           {/* System Status Bar */}
-          <div className="fixed top-0 left-0 right-0 z-50 bg-black border-b border-[var(--border-primary)] px-4 py-2 flex items-center justify-between text-[10px] tracking-wider uppercase opacity-90">
-            <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
-                <span className="status-dot active"></span>
-                <span>SCENYX</span>
-              </Link>
-              <span className="text-[var(--text-muted)]">|</span>
-              <span className="text-[var(--accent-cyan)]">AI STUDIO</span>
-              <span className="text-[var(--text-muted)]">|</span>
-              {/* Removed dynamic clock to avoid hydration mismatches */}
-            </div>
-            <div></div>
-            <div className="flex items-center gap-4">
-              <WalletControls />
-              <HeaderCredits />
+          <div className="fixed top-0 left-0 right-0 z-50 bg-black/95 backdrop-blur border-b border-[var(--border-primary)]">
+            <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-0 sm:justify-between text-[10px] sm:text-[11px] tracking-wider uppercase">
+              <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-between sm:justify-start">
+                <Link href="/" className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
+                  <span className="status-dot active"></span>
+                  <span className="text-xs sm:text-sm">SCENYX</span>
+                </Link>
+                <span className="hidden sm:inline text-[var(--text-muted)]">//</span>
+                <span className="text-[var(--accent-cyan)] text-xs sm:text-sm">AI STUDIO</span>
+              </div>
+
+              <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-2 sm:gap-4">
+                <HeaderCredits />
+                <WalletControls />
+              </div>
             </div>
           </div>
 
           {/* Main content with top padding for status bar */}
-          <div className="pt-12">
+          <div className="pt-20 sm:pt-16 lg:pt-12">
             {children}
           </div>
 
           {/* System Footer */}
-          <div className="fixed bottom-0 left-0 right-0 z-50 bg-black border-t border-[var(--border-dim)] px-4 py-1 flex items-center justify-between text-[9px] tracking-wider uppercase opacity-80">
-            <span className="text-[var(--text-muted)]">
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-black border-t border-[var(--border-dim)] px-3 sm:px-4 py-2 flex flex-col sm:flex-row items-center gap-1 sm:gap-4 justify-between text-[9px] tracking-wider uppercase opacity-80">
+            <span className="text-[var(--text-muted)] text-center">
               SCENYX AI VIDEO GENERATION PLATFORM v1.0.0
-            </span>
-            <span className="text-[var(--text-muted)]">
-              POWERED BY SORA2
             </span>
           </div>
         </WalletProvider>

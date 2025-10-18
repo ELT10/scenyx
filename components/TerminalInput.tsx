@@ -20,7 +20,7 @@ export default function TerminalInput({
     bg-black bg-opacity-60
     border border-[var(--border-dim)]
     text-[var(--text-primary)]
-    px-4 py-3
+    px-3 sm:px-4 py-3
     text-sm
     font-mono
     focus:border-[var(--border-primary)]

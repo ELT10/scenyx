@@ -35,14 +35,14 @@ export default function TerminalPanel({
       )}
       
       {title && (
-        <div className="border-b border-[var(--border-dim)] px-4 py-2 flex items-center justify-between bg-black bg-opacity-60">
+        <div className="border-b border-[var(--border-dim)] px-3 sm:px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-black bg-opacity-60">
           <div className="flex items-center gap-2">
             {status && <span className={`status-dot ${status}`}></span>}
             <span className="text-xs uppercase tracking-widest text-[var(--text-primary)] font-orbitron">
               {title}
             </span>
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-1 self-end sm:self-auto">
             <div className="w-2 h-2 bg-[var(--accent-red)] opacity-70"></div>
             <div className="w-2 h-2 bg-[var(--accent-amber)] opacity-70"></div>
             <div className="w-2 h-2 bg-[var(--text-primary)] opacity-70"></div>
@@ -50,7 +50,7 @@ export default function TerminalPanel({
         </div>
       )}
       
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         {children}
       </div>
     </motion.div>
