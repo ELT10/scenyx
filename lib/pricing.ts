@@ -51,6 +51,9 @@ export const LIPSYNC_PRICING_PER_SECOND_USD_MICROS: Record<string, number> = {
 // Text-to-Speech pricing (OpenAI TTS)
 export const TTS_PRICING_PER_1K_CHARS_USD_MICROS = 15000; // $0.015 per 1k chars
 
+// Avatar generation pricing (Google Imagen-4-fast via Replicate)
+export const AVATAR_GENERATION_USD_MICROS = 40000; // $0.04 per image
+
 export function estimateLipSyncUsdMicros(model: string, seconds: number = 10): number {
   const pricePerSecond = LIPSYNC_PRICING_PER_SECOND_USD_MICROS[model];
   if (!pricePerSecond) return 200000; // Default to ~$0.20 for 10 seconds
@@ -60,6 +63,10 @@ export function estimateLipSyncUsdMicros(model: string, seconds: number = 10): n
 export function estimateTTSUsdMicros(textLength: number): number {
   const chars = textLength;
   return Math.ceil((chars / 1000) * TTS_PRICING_PER_1K_CHARS_USD_MICROS);
+}
+
+export function estimateAvatarUsdMicros(): number {
+  return AVATAR_GENERATION_USD_MICROS;
 }
 
 

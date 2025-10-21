@@ -109,6 +109,9 @@ export const LIPSYNC_PRICING_PER_SECOND_USD_MICROS: Record<string, number> = {
 
 export const TTS_PRICING_PER_1K_CHARS_USD_MICROS = 15000;
 
+// Avatar generation pricing (Google Imagen-4-fast via Replicate)
+export const AVATAR_GENERATION_USD_MICROS = 38000; // $0.038 per image
+
 export function estimateLipSyncCredits(model: string, seconds: number = 10): number {
   const pricePerSecond = LIPSYNC_PRICING_PER_SECOND_USD_MICROS[model];
   const priceUsdMicros = pricePerSecond 
@@ -123,6 +126,12 @@ export function estimateTTSCredits(textLength: number): number {
   const chars = textLength;
   const costUsdMicros = Math.ceil((chars / 1000) * TTS_PRICING_PER_1K_CHARS_USD_MICROS);
   const totalUsd = costUsdMicros / 1_000_000;
+  const credits = totalUsd / DEFAULT_CREDIT_USD_VALUE;
+  return Math.ceil(credits * 1_000_000) / 1_000_000;
+}
+
+export function estimateAvatarCredits(): number {
+  const totalUsd = AVATAR_GENERATION_USD_MICROS / 1_000_000;
   const credits = totalUsd / DEFAULT_CREDIT_USD_VALUE;
   return Math.ceil(credits * 1_000_000) / 1_000_000;
 }

@@ -13,7 +13,7 @@ import BackgroundEffects from '@/components/BackgroundEffects';
 import TerminalInput from '@/components/TerminalInput';
 import GlitchText from '@/components/GlitchText';
 import CostEstimate from '@/components/CostEstimate';
-import { estimateVideoCredits, estimateChatCredits, estimateLipSyncCredits, estimateTTSCredits, formatCredits } from '@/lib/client/pricing';
+import { estimateVideoCredits, estimateChatCredits, estimateLipSyncCredits, estimateTTSCredits, estimateAvatarCredits, formatCredits } from '@/lib/client/pricing';
 import { notifyCreditsUpdated } from '@/lib/client/events';
 
 interface VideoStatus {
@@ -145,6 +145,12 @@ export default function Home() {
   const [audioDuration, setAudioDuration] = useState<number>(10); // Default 10 seconds
   const lipSyncPollingRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Avatar generation state
+  const [imageSource, setImageSource] = useState<'upload' | 'ai'>('upload');
+  const [avatarPrompt, setAvatarPrompt] = useState('');
+  const [generatingAvatar, setGeneratingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
 
   // Cost estimates
   const videoCost = useMemo(() => {
@@ -180,6 +186,10 @@ export default function Home() {
   const ttsCost = useMemo(() => {
     return estimateTTSCredits(lipSyncScript.length);
   }, [lipSyncScript]);
+
+  const avatarCost = useMemo(() => {
+    return estimateAvatarCredits();
+  }, []);
 
   // Enhance Prompt estimated credits (mirrors server-side rough token estimate)
   const enhancePromptCredits = useMemo(() => {
@@ -892,6 +902,62 @@ export default function Home() {
       const durationInSeconds = Math.ceil(audio.duration);
       setAudioDuration(durationInSeconds);
       console.log('Audio duration detected:', durationInSeconds, 'seconds');
+    }
+  };
+
+  // Generate AI Avatar
+  const generateAvatar = async () => {
+    if (!publicKey) {
+      setAvatarError('WALLET NOT CONNECTED: Please connect your wallet');
+      return;
+    }
+
+    if (!avatarPrompt.trim()) {
+      setAvatarError('Please enter a description for your avatar');
+      return;
+    }
+
+    setGeneratingAvatar(true);
+    setAvatarError(null);
+
+    try {
+      const response = await fetch('/api/generate-avatar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: avatarPrompt,
+          aspect_ratio: '4:3',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate avatar');
+      }
+
+      if (data.success && data.image_url) {
+        // Set the generated image as preview
+        setLipSyncImagePreview(data.image_url);
+        
+        // Convert the image URL to a File object for upload
+        const imageResponse = await fetch(data.image_url);
+        const blob = await imageResponse.blob();
+        const file = new File([blob], 'avatar.png', { type: 'image/png' });
+        setLipSyncImageFile(file);
+        
+        // Notify credits updated
+        notifyCreditsUpdated();
+      } else {
+        throw new Error('No image URL in response');
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setAvatarError(`GENERATION FAILED: ${message}`);
+    } finally {
+      setGeneratingAvatar(false);
     }
   };
 
@@ -1867,24 +1933,133 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Image Upload */}
+                {/* Image Source Selection */}
                 <div>
-                  <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
-                    {'>'} UPLOAD IMAGE
+                  <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-4 font-mono">
+                    {'>'} IMAGE SOURCE
                   </label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageFileChange}
-                    disabled={loadingLipSync || loadingTTS}
-                    className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all file:mr-4 file:py-2 file:px-4 file:border-0 file:text-sm file:font-mono file:bg-[var(--text-primary)] file:text-black hover:file:opacity-80"
-                  />
-                  <p className="text-xs text-[var(--text-muted)] mt-2">
-                    💡 Best results: Front-facing portrait with clear facial features
-                  </p>
+                  
+                  {/* Selection Boxes */}
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <button
+                      onClick={() => {
+                        setImageSource('upload');
+                        setAvatarError(null);
+                      }}
+                      disabled={loadingLipSync || loadingTTS || generatingAvatar}
+                      className={`p-6 border-2 transition-all ${
+                        imageSource === 'upload'
+                          ? 'border-[var(--border-primary)] bg-[#0a2029]'
+                          : 'border-[var(--border-dim)] bg-black bg-opacity-40 hover:border-[var(--text-muted)]'
+                      }`}
+                    >
+                      <div className="text-center">
+                        <div className="text-2xl mb-2">📤</div>
+                        <div className="text-sm font-mono uppercase tracking-wide text-[var(--text-primary)]">
+                          Upload Image
+                        </div>
+                        <div className="text-xs text-[var(--text-muted)] mt-1">
+                          Use your own photo
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setImageSource('ai');
+                        setLipSyncError(null);
+                      }}
+                      disabled={loadingLipSync || loadingTTS || generatingAvatar}
+                      className={`p-6 border-2 transition-all ${
+                        imageSource === 'ai'
+                          ? 'border-[var(--border-primary)] bg-[#0a2029]'
+                          : 'border-[var(--border-dim)] bg-black bg-opacity-40 hover:border-[var(--text-muted)]'
+                      }`}
+                    >
+                      <div className="text-center">
+                        <div className="text-2xl mb-2">🤖</div>
+                        <div className="text-sm font-mono uppercase tracking-wide text-[var(--text-primary)]">
+                          AI Avatar
+                        </div>
+                        <div className="text-xs text-[var(--text-muted)] mt-1">
+                          Generate with AI
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Upload Image Flow */}
+                  {imageSource === 'upload' && (
+                    <div className="space-y-4">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageFileChange}
+                        disabled={loadingLipSync || loadingTTS || generatingAvatar}
+                        className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all file:mr-4 file:py-2 file:px-4 file:border-0 file:text-sm file:font-mono file:bg-[var(--text-primary)] file:text-black hover:file:opacity-80"
+                      />
+                      <p className="text-xs text-[var(--text-muted)]">
+                        💡 Best results: Front-facing portrait with clear facial features
+                      </p>
+                    </div>
+                  )}
+
+                  {/* AI Avatar Flow */}
+                  {imageSource === 'ai' && (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
+                          DESCRIBE YOUR AVATAR
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g., young woman with brown hair, professional businessman, elderly man with beard..."
+                          value={avatarPrompt}
+                          onChange={(e) => setAvatarPrompt(e.target.value)}
+                          disabled={loadingLipSync || loadingTTS || generatingAvatar}
+                          className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all placeholder:text-[var(--text-muted)]"
+                        />
+                        <p className="text-xs text-[var(--text-muted)] mt-2">
+                          💡 Be descriptive: age, gender, hair style, clothing, ethnicity, etc.
+                        </p>
+                      </div>
+
+                      <CostEstimate 
+                        credits={avatarCost} 
+                        operation="Avatar Generation" 
+                      />
+
+                      <GlowButton
+                        onClick={generateAvatar}
+                        disabled={generatingAvatar || !avatarPrompt.trim() || loadingLipSync || loadingTTS}
+                        loading={generatingAvatar}
+                        className="w-full"
+                      >
+                        {generatingAvatar ? 'GENERATING AVATAR...' : 'GENERATE AVATAR'}
+                      </GlowButton>
+
+                      {avatarError && (
+                        <div className="p-3 bg-red-500 bg-opacity-10 border border-red-500 text-red-400 text-xs font-mono">
+                          {avatarError}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Image Preview (shown for both flows) */}
                   {lipSyncImagePreview && (
                     <div className="mt-4 border border-[var(--border-dim)] p-2 bg-black">
                       <img src={lipSyncImagePreview} alt="Preview" className="w-full max-h-64 object-contain" />
+                      <button
+                        onClick={() => {
+                          setLipSyncImagePreview(null);
+                          setLipSyncImageFile(null);
+                        }}
+                        disabled={loadingLipSync || loadingTTS || generatingAvatar}
+                        className="w-full mt-2 px-4 py-2 bg-red-500 bg-opacity-20 border border-red-500 text-red-400 text-xs font-mono hover:bg-opacity-30 transition-all"
+                      >
+                        CLEAR IMAGE
+                      </button>
                     </div>
                   )}
                 </div>
