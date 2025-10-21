@@ -2300,38 +2300,101 @@ export default function Home() {
         {/* Info Panel */}
         <TerminalPanel title="SYSTEM INFORMATION" corners={false} className="mt-8">
           <div className="text-xs space-y-2 text-[var(--text-muted)]">
-            <div className="flex items-start gap-2">
-              <span className="text-[var(--text-primary)]">{'>'}</span>
-              <span>Configure OpenAI API key in .env as OPEN_API_KEY to enable AI features</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="text-[var(--text-primary)]">{'>'}</span>
-              <span>Use Script Generator to create professional video ad scripts with AI</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="text-[var(--text-primary)]">{'>'}</span>
-              <span>Video generation time varies based on complexity and model selection</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="text-[var(--text-primary)]">{'>'}</span>
-              <span>Use Remix to make targeted adjustments to Sora-2 and Sora-2-Pro videos without starting from scratch</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="text-[var(--text-primary)]">{'>'}</span>
-              <span>Credits are only deducted when videos complete successfully - failed generations are free</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="text-[var(--text-primary)]">{'>'}</span>
-              <span>All generated videos are stored locally and accessible via the Archive</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="text-[var(--text-primary)]">{'>'}</span>
-              <span>Use Lip Sync to animate portraits with AI-generated voiceovers or uploaded audio files</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="text-[var(--text-primary)]">{'>'}</span>
-              <span>Configure Replicate API key as REPLICATE_API_TOKEN in .env to enable Lip Sync features</span>
-            </div>
+            {activeTab === 'script' && (
+              <>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Enter Company/Product Name (eg.CocoGold), Company/Product Type (eg.Hair Oil), and a Description</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Select Generation Quality, Video Duration, and Video Orientation</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Leave Custom Thread empty and click [ GENERATE THREADS ] for ideas</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Select a thread to auto-generate a script, or enter a custom thread and click [ GENERATE SCRIPT ]</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Review the output and click [ GENERATE VIDEO ] to send it to Video Gen</span>
+                </div>
+              </>
+            )}
+
+            {activeTab === 'generate' && (
+              <>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Choose Video Quality Model (SORA-2 or SORA-2-PRO)</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Set Video Duration and Orientation; PRO adds Video Resolution</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Write a detailed prompt; optionally click [ ENHANCE PROMPT ]</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Click [ INITIATE VIDEO GENERATION ] and monitor progress</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Use REMIX after completion to make a single targeted change</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Credits are only deducted on success; time varies by model and complexity</span>
+                </div>
+              </>
+            )}
+
+            {activeTab === 'lipsync' && (
+              <>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Select LIP SYNC MODEL (WAN-Video recommended; Omni-Human higher quality)</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>For WAN-Video, optionally enter a VIDEO PROMPT describing the action</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Upload a front-facing portrait image with clear facial features</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Provide audio: type a script and [ GENERATE VOICEOVER ] or upload an audio file of a narration</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Click [ GENERATE LIP SYNC VIDEO ] to create the video</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Download promptly: lip sync videos expire in ~1 hour</span>
+                </div>
+              </>
+            )}
+
+            {activeTab === 'view' && (
+              <>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Preview and download results here; lip sync ~1h expiry, others ~24h</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--text-primary)]">{'>'}</span>
+                  <span>Use REMIX on completed videos to create a targeted update</span>
+                </div>
+              </>
+            )}
           </div>
         </TerminalPanel>
       </div>
