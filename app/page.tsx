@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { useWallet } from '@solana/wallet-adapter-react';
 import TerminalPanel from '@/components/TerminalPanel';
@@ -12,7 +13,7 @@ import BackgroundEffects from '@/components/BackgroundEffects';
 import TerminalInput from '@/components/TerminalInput';
 import GlitchText from '@/components/GlitchText';
 import CostEstimate from '@/components/CostEstimate';
-import { estimateVideoCredits, estimateChatCredits, estimateLipSyncCredits, estimateTTSCredits } from '@/lib/client/pricing';
+import { estimateVideoCredits, estimateChatCredits, estimateLipSyncCredits, estimateTTSCredits, formatCredits } from '@/lib/client/pricing';
 import { notifyCreditsUpdated } from '@/lib/client/events';
 
 interface VideoStatus {
@@ -62,7 +63,16 @@ export default function Home() {
   const [videoDuration, setVideoDuration] = useState<'4' | '8' | '12'>('12');
   const [videoOrientation, setVideoOrientation] = useState<'vertical' | 'horizontal'>('horizontal');
   const [videoResolution, setVideoResolution] = useState<'standard' | 'high'>('standard');
+  const [enhancingPrompt, setEnhancingPrompt] = useState(false);
   const generationPollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Remix video state
+  const [showRemixUI, setShowRemixUI] = useState(false);
+  const [remixPrompt, setRemixPrompt] = useState('');
+  const [remixing, setRemixing] = useState(false);
+  const [currentVideoModel, setCurrentVideoModel] = useState<string | null>(null);
+  const [currentVideoSeconds, setCurrentVideoSeconds] = useState<string>('12');
+  const [currentVideoSize, setCurrentVideoSize] = useState<string>('1280x720');
 
   // Video status check state
   const [videoId, setVideoId] = useState('');
@@ -93,6 +103,13 @@ export default function Home() {
   const [archiveFetching, setArchiveFetching] = useState<Record<string, boolean>>({});
   const archivePollingRef = useRef<NodeJS.Timeout | null>(null);
   const archiveItemsRef = useRef<ArchiveItem[]>([]);
+
+  // Archive remix state
+  const [archiveRemixVideoId, setArchiveRemixVideoId] = useState<string | null>(null);
+  const [archiveRemixPrompt, setArchiveRemixPrompt] = useState('');
+  const [archiveRemixing, setArchiveRemixing] = useState(false);
+  const [archiveRemixCost, setArchiveRemixCost] = useState<number>(0);
+  const [archiveRemixModel, setArchiveRemixModel] = useState<string>('');
 
   // Script generator state
   const [companyName, setCompanyName] = useState('');
@@ -135,6 +152,19 @@ export default function Home() {
     return estimateVideoCredits(videoQuality, seconds, videoResolution);
   }, [videoQuality, videoDuration, videoResolution]);
 
+  // Remix cost based on the actual generated video's properties
+  const remixCost = useMemo(() => {
+    if (!currentVideoModel) return 0;
+    const seconds = parseInt(currentVideoSeconds) || 12;
+    // Determine resolution from size
+    const size = currentVideoSize;
+    let resolution = 'standard';
+    if (size === '1792x1024' || size === '1024x1792') {
+      resolution = 'high';
+    }
+    return estimateVideoCredits(currentVideoModel, seconds, resolution);
+  }, [currentVideoModel, currentVideoSeconds, currentVideoSize]);
+
   const threadsCost = useMemo(() => {
     return estimateChatCredits(scriptQuality, 1000, 1500);
   }, [scriptQuality]);
@@ -150,6 +180,13 @@ export default function Home() {
   const ttsCost = useMemo(() => {
     return estimateTTSCredits(lipSyncScript.length);
   }, [lipSyncScript]);
+
+  // Enhance Prompt estimated credits (mirrors server-side rough token estimate)
+  const enhancePromptCredits = useMemo(() => {
+    const approxInputTokens = Math.min(4000, Math.max(800, Math.ceil(prompt.length / 4) + 1200));
+    const approxOutputTokens = 1200;
+    return estimateChatCredits('mini', approxInputTokens, approxOutputTokens);
+  }, [prompt]);
 
   // LocalStorage functions
   const saveVideoIdToLocalStorage = (videoId: string, prompt: string) => {
@@ -179,11 +216,20 @@ export default function Home() {
   const pollGenerationProgress = useCallback(async (videoId: string, savedPrompt: string) => {
     try {
       const response = await fetch(`/api/check-video?video_id=${encodeURIComponent(videoId)}`);
+      
+      // Handle response
+      const data = await response.json();
+      
+      // Check if it's a temporary server error - if so, ignore and keep polling
+      if (!response.ok && data.error === 'Server error' && data.details?.error?.type === 'server_error') {
+        console.log('⚠️ Temporary server error while polling, will retry on next poll...');
+        return; // Don't stop polling, just skip this iteration
+      }
+      
       if (!response.ok) {
-        throw new Error('Failed to check video status');
+        throw new Error(data.error || 'Failed to check video status');
       }
 
-      const data = await response.json();
       setGenerationProgress(data.progress || 0);
       setGenerationStatus(data.status);
 
@@ -191,6 +237,9 @@ export default function Home() {
         setVideoUrl(data.video_data);
         setLoading(false);
         setGenerationProgress(100);
+        setCurrentVideoModel(data.model || null); // Store the model for remix capability check
+        setCurrentVideoSeconds(data.seconds || '12');
+        setCurrentVideoSize(data.size || '1280x720');
         notifyCreditsUpdated(); // Credits were deducted, update header
 
         if (generationPollingRef.current) {
@@ -212,13 +261,9 @@ export default function Home() {
       }
     } catch (err: any) {
       console.error('Error polling progress:', err);
-      setError(err.message || 'Failed to check video progress');
-      setLoading(false);
-
-      if (generationPollingRef.current) {
-        clearInterval(generationPollingRef.current);
-        generationPollingRef.current = null;
-      }
+      // Don't show error to user or stop polling for network errors
+      // The video might still be generating, just keep trying
+      console.log('⚠️ Network error while polling, will retry on next poll...');
     }
   }, []);
 
@@ -239,6 +284,11 @@ export default function Home() {
     setGeneratedVideoId(null);
     setGenerationProgress(0);
     setGenerationStatus('queued');
+    setShowRemixUI(false);
+    setRemixPrompt('');
+    setCurrentVideoModel(null);
+    setCurrentVideoSeconds('12');
+    setCurrentVideoSize('1280x720');
 
     try {
       const response = await fetch('/api/generate-video', {
@@ -294,6 +344,135 @@ export default function Home() {
     }
   };
 
+  const remixVideo = async () => {
+    if (!publicKey) {
+      setError('WALLET NOT CONNECTED: Please connect your wallet to remix videos');
+      return;
+    }
+
+    if (!generatedVideoId) {
+      setError('No video ID available for remix');
+      return;
+    }
+
+    if (!remixPrompt.trim()) {
+      setError('Please enter a remix prompt describing the change you want');
+      return;
+    }
+
+    setRemixing(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/remix-video', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          video_id: generatedVideoId,
+          prompt: remixPrompt,
+          pollForCompletion: false,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const errorMsg = data.errorCode 
+          ? `${data.errorCode.toUpperCase()}: ${data.error}` 
+          : (data.error || 'Failed to remix video');
+        throw new Error(errorMsg);
+      }
+
+      // Store the new video ID for tracking
+      const newVideoId = data.video_id;
+      if (newVideoId) {
+        saveVideoIdToLocalStorage(newVideoId, `REMIX: ${remixPrompt}`);
+      }
+
+      // Reset remix state
+      setShowRemixUI(false);
+      setRemixPrompt('');
+      setRemixing(false);
+
+      // Update credits
+      notifyCreditsUpdated();
+
+      // Switch to archive tab to show the new remix being generated
+      setActiveTab('view');
+
+      // Reload archive to show the new remix immediately
+      setLoadingArchive(true);
+      try {
+        const res = await fetch('/api/archive/recent?hours=20');
+        const archiveData = await res.json();
+        if (res.ok) {
+          const items: ArchiveItem[] = archiveData.items || [];
+          setArchiveItems(items);
+          archiveItemsRef.current = items;
+          
+          // Fetch status for all items including the new one
+          const fetchingMap: Record<string, boolean> = {};
+          items.forEach((it) => { fetchingMap[it.video_id] = true; });
+          setArchiveFetching(fetchingMap);
+
+          items.forEach(async (item) => {
+            try {
+              const url = item.source === 'replicate'
+                ? `/api/check-lipsync?prediction_id=${encodeURIComponent(item.video_id)}`
+                : `/api/check-video?video_id=${encodeURIComponent(item.video_id)}`;
+              const resp = await fetch(url);
+              const payload = await resp.json();
+              
+              // Ignore temporary server errors, will retry on next poll
+              if (!resp.ok && payload.error === 'Server error' && payload.details?.error?.type === 'server_error') {
+                console.log(`⚠️ Temporary server error for ${item.video_id}, will retry on next poll...`);
+                setArchiveFetching((prev) => ({ ...prev, [item.video_id]: false }));
+                return;
+              }
+              
+              if (!resp.ok) throw new Error(payload.error || 'Failed to refresh');
+              const rawStatus: string = payload.status || item.status;
+              let mapped: ArchiveItem['status'] = item.status;
+              switch (rawStatus) {
+                case 'queued': mapped = 'queued'; break;
+                case 'in_progress':
+                case 'processing':
+                case 'starting': mapped = 'in_progress'; break;
+                case 'completed':
+                case 'succeeded': mapped = 'completed'; break;
+                case 'failed': mapped = 'failed'; break;
+                default: mapped = item.status;
+              }
+              setArchiveItems((prev) => {
+                const next = prev.map((it) => it.video_id === item.video_id ? { ...it, status: mapped } : it);
+                archiveItemsRef.current = next;
+                return next;
+              });
+              const finalUrl = payload.video_data || payload.video_url || payload.output || undefined;
+              if (finalUrl) {
+                setPreviews((p) => ({ ...p, [item.video_id]: { ...(p[item.video_id] || {}), url: finalUrl } }));
+              }
+            } catch (_) {
+              // ignore single-item refresh errors
+            } finally {
+              setArchiveFetching((prev) => ({ ...prev, [item.video_id]: false }));
+            }
+          });
+        }
+      } catch (e: any) {
+        console.error('Archive refresh failed:', e);
+      } finally {
+        setLoadingArchive(false);
+      }
+
+    } catch (err: any) {
+      setError(err.message || 'An error occurred while remixing the video');
+      setRemixing(false);
+    }
+  };
+
   const checkVideoStatus = async () => {
     if (!videoId.trim()) {
       setStatusError('Please enter a video ID');
@@ -307,6 +486,13 @@ export default function Home() {
     try {
       const response = await fetch(`/api/check-video?video_id=${encodeURIComponent(videoId)}`);
       const data = await response.json();
+
+      // Check if it's a temporary server error - show a gentle warning but don't fail
+      if (!response.ok && data.error === 'Server error' && data.details?.error?.type === 'server_error') {
+        setStatusError('Temporary server error. If polling is enabled, it will keep trying...');
+        setCheckingStatus(false);
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to check video status');
@@ -425,6 +611,14 @@ export default function Home() {
                 : `/api/check-video?video_id=${encodeURIComponent(item.video_id)}`;
               const resp = await fetch(url);
               const payload = await resp.json();
+              
+              // Ignore temporary server errors, will retry on next poll
+              if (!resp.ok && payload.error === 'Server error' && payload.details?.error?.type === 'server_error') {
+                console.log(`⚠️ Temporary server error for ${item.video_id}, will retry on next poll...`);
+                setArchiveFetching((prev) => ({ ...prev, [item.video_id]: false }));
+                return;
+              }
+              
               if (!resp.ok) throw new Error(payload.error || 'Failed to refresh');
               const rawStatus: string = payload.status || item.status;
               let mapped: ArchiveItem['status'] = item.status;
@@ -480,6 +674,13 @@ export default function Home() {
             : `/api/check-video?video_id=${encodeURIComponent(item.video_id)}`;
           const res = await fetch(url);
           const data = await res.json();
+          
+          // Ignore temporary server errors, will retry on next poll
+          if (!res.ok && data.error === 'Server error' && data.details?.error?.type === 'server_error') {
+            console.log(`⚠️ Temporary server error for ${item.video_id}, will retry...`);
+            return;
+          }
+          
           if (!res.ok) return;
           // Normalize status values to our UI set
           const rawStatus: string = data.status || item.status;
@@ -777,6 +978,132 @@ export default function Home() {
   }, []);
 
   // Generate lip sync video
+  const remixArchiveVideo = async () => {
+    if (!publicKey) {
+      setError('WALLET NOT CONNECTED: Please connect your wallet to remix videos');
+      return;
+    }
+
+    if (!archiveRemixVideoId) {
+      setError('No video ID selected for remix');
+      return;
+    }
+
+    if (!archiveRemixPrompt.trim()) {
+      setError('Please enter a remix prompt describing the change you want');
+      return;
+    }
+
+    setArchiveRemixing(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/remix-video', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          video_id: archiveRemixVideoId,
+          prompt: archiveRemixPrompt,
+          pollForCompletion: false,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const errorMsg = data.errorCode 
+          ? `${data.errorCode.toUpperCase()}: ${data.error}` 
+          : (data.error || 'Failed to remix video');
+        throw new Error(errorMsg);
+      }
+
+      // Store the new video ID for tracking
+      const newVideoId = data.video_id;
+      if (newVideoId) {
+        saveVideoIdToLocalStorage(newVideoId, `REMIX: ${archiveRemixPrompt}`);
+      }
+
+      // Close remix dialog
+      setArchiveRemixVideoId(null);
+      setArchiveRemixPrompt('');
+      setArchiveRemixing(false);
+
+      // Refresh archive to show new item immediately
+      notifyCreditsUpdated();
+      
+      // Reload archive items
+      setLoadingArchive(true);
+      try {
+        const res = await fetch('/api/archive/recent?hours=20');
+        const archiveData = await res.json();
+        if (res.ok) {
+          const items: ArchiveItem[] = archiveData.items || [];
+          setArchiveItems(items);
+          archiveItemsRef.current = items;
+          
+          // Fetch status for all items including the new one
+          const fetchingMap: Record<string, boolean> = {};
+          items.forEach((it) => { fetchingMap[it.video_id] = true; });
+          setArchiveFetching(fetchingMap);
+
+          items.forEach(async (item) => {
+            try {
+              const url = item.source === 'replicate'
+                ? `/api/check-lipsync?prediction_id=${encodeURIComponent(item.video_id)}`
+                : `/api/check-video?video_id=${encodeURIComponent(item.video_id)}`;
+              const resp = await fetch(url);
+              const payload = await resp.json();
+              
+              // Ignore temporary server errors, will retry on next poll
+              if (!resp.ok && payload.error === 'Server error' && payload.details?.error?.type === 'server_error') {
+                console.log(`⚠️ Temporary server error for ${item.video_id}, will retry on next poll...`);
+                setArchiveFetching((prev) => ({ ...prev, [item.video_id]: false }));
+                return;
+              }
+              
+              if (!resp.ok) throw new Error(payload.error || 'Failed to refresh');
+              const rawStatus: string = payload.status || item.status;
+              let mapped: ArchiveItem['status'] = item.status;
+              switch (rawStatus) {
+                case 'queued': mapped = 'queued'; break;
+                case 'in_progress':
+                case 'processing':
+                case 'starting': mapped = 'in_progress'; break;
+                case 'completed':
+                case 'succeeded': mapped = 'completed'; break;
+                case 'failed': mapped = 'failed'; break;
+                default: mapped = item.status;
+              }
+              setArchiveItems((prev) => {
+                const next = prev.map((it) => it.video_id === item.video_id ? { ...it, status: mapped } : it);
+                archiveItemsRef.current = next;
+                return next;
+              });
+              const finalUrl = payload.video_data || payload.video_url || payload.output || undefined;
+              if (finalUrl) {
+                setPreviews((p) => ({ ...p, [item.video_id]: { ...(p[item.video_id] || {}), url: finalUrl } }));
+              }
+            } catch (_) {
+              // ignore single-item refresh errors
+            } finally {
+              setArchiveFetching((prev) => ({ ...prev, [item.video_id]: false }));
+            }
+          });
+        }
+      } catch (e: any) {
+        console.error('Archive refresh failed:', e);
+      } finally {
+        setLoadingArchive(false);
+      }
+
+    } catch (err: any) {
+      setError(err.message || 'An error occurred while remixing the video');
+      setArchiveRemixing(false);
+    }
+  };
+
   const generateLipSync = async () => {
     if (!publicKey) {
       setLipSyncError('WALLET NOT CONNECTED: Please connect your wallet');
@@ -1204,6 +1531,41 @@ export default function Home() {
 
                 <TerminalInput
                   label="VIDEO GENERATION PROMPT"
+                  labelRight={
+                    <button
+                      onClick={async () => {
+                        if (!prompt.trim() || enhancingPrompt) return;
+                        try {
+                          setEnhancingPrompt(true);
+                          const res = await fetch('/api/enhance-prompt', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              prompt,
+                              seconds: videoDuration,
+                              orientation: videoOrientation,
+                              quality: 'mini',
+                            }),
+                          });
+                          const data = await res.json();
+                          if (!res.ok || !data?.enhancedPrompt) {
+                            throw new Error(data?.error || 'Failed to enhance prompt');
+                          }
+                          setPrompt(data.enhancedPrompt);
+                        } catch (e: any) {
+                          setError(e?.message || 'Failed to enhance prompt');
+                        } finally {
+                          setEnhancingPrompt(false);
+                        }
+                      }}
+                      disabled={enhancingPrompt || !prompt.trim() || loading}
+                      className="text-[10px] uppercase tracking-wider px-2 py-1 border border-[var(--border-dim)] text-[var(--text-muted)] hover:border-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] transition-colors flex items-center gap-2"
+                      title="Enhance your prompt using best-practice structure"
+                    >
+                      <span>{enhancingPrompt ? '[ ENHANCING ... ]' : '[ ENHANCE PROMPT ]'}</span>
+                      <span className="text-[9px] opacity-80 tracking-[0.1px]"> {formatCredits(enhancePromptCredits)} CR</span>
+                    </button>
+                  }
                   placeholder="Enter detailed video description..."
                   multiline
                   rows={4}
@@ -1289,16 +1651,84 @@ export default function Home() {
                       >
                         [ DOWNLOAD ]
                       </a>
+                      {currentVideoModel && currentVideoModel.startsWith('sora-2') && (
+                        <button
+                          onClick={() => {
+                            setShowRemixUI(!showRemixUI);
+                            if (!showRemixUI) {
+                              setRemixPrompt('');
+                            }
+                          }}
+                          className="flex-1 border border-[var(--accent-cyan)] text-[var(--accent-cyan)] px-4 sm:px-6 py-3 text-sm uppercase tracking-wider hover:bg-[var(--accent-cyan)] hover:text-[#000000] hover:bg-opacity-10 transition-all"
+                        >
+                          [ REMIX VIDEO ]
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           setVideoUrl(null);
                           setPrompt('');
+                          setShowRemixUI(false);
+                          setRemixPrompt('');
+                          setCurrentVideoModel(null);
+                          setCurrentVideoSeconds('12');
+                          setCurrentVideoSize('1280x720');
                         }}
                         className="flex-1 border border-[var(--border-dim)] text-[var(--text-muted)] px-4 sm:px-6 py-3 text-sm uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-all"
                       >
                         [ NEW GENERATION ]
                       </button>
                     </div>
+
+                    {/* Remix UI */}
+                    {showRemixUI && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="mt-6 border border-[#444c53] bg-[#0a131a] bg-opacity-5 p-4"
+                      >
+                        <h4 className="text-sm uppercase tracking-widest text-[#ffffff] mb-3 font-mono">
+                          {'>'} REMIX VIDEO
+                        </h4>
+                        <p className="text-xs text-[var(--text-muted)] mb-4">
+                          Describe a single, focused change to make to the video (e.g., "Shift the color palette to warm tones", "Change time from day to night", "Add falling snow").
+                        </p>
+                        <TerminalInput
+                          label="REMIX PROMPT"
+                          placeholder="Describe the change you want to make..."
+                          multiline
+                          rows={3}
+                          value={remixPrompt}
+                          onChange={(e) => setRemixPrompt(e.target.value)}
+                          disabled={remixing}
+                        />
+                        <CostEstimate 
+                          credits={remixCost} 
+                          operation="Video Remix" 
+                          className="mt-3"
+                        />
+                        <div className="flex gap-3 mt-4">
+                          <GlowButton
+                            onClick={remixVideo}
+                            disabled={remixing || !remixPrompt.trim()}
+                            loading={remixing}
+                            className="flex-1"
+                          >
+                            {remixing ? 'REMIXING...' : '[ START REMIX ]'}
+                          </GlowButton>
+                          <button
+                            onClick={() => {
+                              setShowRemixUI(false);
+                              setRemixPrompt('');
+                            }}
+                            className="flex-1 border border-[var(--border-dim)] text-[var(--text-muted)] px-4 py-3 text-sm uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-all"
+                            disabled={remixing}
+                          >
+                            [ CANCEL ]
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
                   </motion.div>
                 )}
               </div>
@@ -1737,6 +2167,25 @@ export default function Home() {
                             >
                               [ DOWNLOAD ]
                             </a>
+                            {item.status === 'completed' && item.source === 'openai' && item.model.startsWith('sora-2') && (
+                              <button
+                                onClick={() => {
+                                  setArchiveRemixVideoId(item.video_id);
+                                  setArchiveRemixPrompt('');
+                                  setArchiveRemixModel(item.model);
+                                  
+                                  // Calculate remix cost based on original video parameters
+                                  const seconds = parseInt(item.seconds || '12');
+                                  // Determine resolution from model - if we don't have size info, assume standard
+                                  const resolution = 'standard'; // We can't determine high res from archive data easily
+                                  const cost = estimateVideoCredits(item.model, seconds, resolution);
+                                  setArchiveRemixCost(cost);
+                                }}
+                                className="flex-1 text-center border border-[var(--accent-cyan)] text-[var(--accent-cyan)] px-2.5 sm:px-3 py-2 text-[10px] uppercase tracking-wider hover:bg-[var(--accent-cyan)] hover:bg-opacity-10 transition-all"
+                              >
+                                [ REMIX ]
+                              </button>
+                            )}
                           </div>
                           {preview.error && (
                             <div className="mt-2 text-[10px] text-[var(--accent-red)]">{preview.error}</div>
@@ -1745,6 +2194,103 @@ export default function Home() {
                       );
                     })}
                   </div>
+                )}
+
+                {/* Archive Remix Modal */}
+                {archiveRemixVideoId && typeof window !== 'undefined' && createPortal(
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-4 overflow-y-auto"
+                    style={{ zIndex: 2147483647 }}
+                    onClick={() => {
+                      if (!archiveRemixing) {
+                        setArchiveRemixVideoId(null);
+                        setArchiveRemixPrompt('');
+                      }
+                    }}
+                  >
+                    <motion.div
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="bg-black border-2 border-[var(--accent-cyan)] p-4 sm:p-6 max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto"
+                    >
+                      <h3 className="text-lg uppercase tracking-widest text-[var(--accent-cyan)] mb-4 font-mono">
+                        {'>'} REMIX VIDEO
+                      </h3>
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-col mb-[18px] items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] uppercase text-[var(--text-muted)] mb-1">Video ID</p>
+                              <p className="text-xs text-[var(--text-primary)] font-mono break-all">{archiveRemixVideoId}</p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                if (archiveRemixVideoId) {
+                                  navigator.clipboard.writeText(archiveRemixVideoId);
+                                }
+                              }}
+                              className="flex-shrink-0 border border-[var(--border-dim)] text-[var(--text-muted)] px-2 py-1 text-[9px] uppercase tracking-wider hover:border-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] transition-all"
+                              title="Copy Video ID"
+                            >
+                              [ COPY ]
+                            </button>
+                          </div>
+                          <p className="text-xs text-[var(--text-muted)]">
+                            Model: <span className="text-[var(--text-primary)] uppercase">{archiveRemixModel}</span>
+                          </p>
+                        </div>
+                        <div className="text-left sm:text-right flex-shrink-0">
+                          <p className="text-[10px] uppercase text-[var(--text-muted)]">Estimated Cost</p>
+                          <p className="text-lg font-bold text-[var(--accent-cyan)] font-mono">{formatCredits(archiveRemixCost)}</p>
+                          <p className="text-[9px] text-[var(--text-muted)]">CREDITS</p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)] mb-4">
+                        Describe a single, focused change to make to the video. Keep it simple for best results.
+                      </p>
+                      <TerminalInput
+                        label="REMIX PROMPT"
+                        placeholder="e.g., Shift the color palette to warm sunset tones..."
+                        multiline
+                        rows={4}
+                        value={archiveRemixPrompt}
+                        onChange={(e) => setArchiveRemixPrompt(e.target.value)}
+                        disabled={archiveRemixing}
+                      />
+                      <div className="border border-[var(--border-dim)] bg-black bg-opacity-60 p-3 mt-4 text-xs text-[var(--text-muted)]">
+                        💡 <strong>Best practices:</strong> Use specific, single changes like "change lighting to golden hour", "add falling snow", or "shift colors to cool blue tones". Avoid multiple changes in one remix.
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                        <GlowButton
+                          onClick={remixArchiveVideo}
+                          disabled={archiveRemixing || !archiveRemixPrompt.trim()}
+                          loading={archiveRemixing}
+                          className="flex-1"
+                        >
+                          {archiveRemixing ? 'REMIXING...' : '[ START REMIX ]'}
+                        </GlowButton>
+                        <button
+                          onClick={() => {
+                            setArchiveRemixVideoId(null);
+                            setArchiveRemixPrompt('');
+                          }}
+                          className="flex-1 border border-[var(--border-dim)] text-[var(--text-muted)] px-6 py-3 text-[11px] sm:text-sm uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-all"
+                          disabled={archiveRemixing}
+                        >
+                          [ CANCEL ]
+                        </button>
+                      </div>
+                      {error && (
+                        <div className="mt-4 border border-[var(--accent-red)] bg-[var(--accent-red)] bg-opacity-10 p-3">
+                          <div className="text-[#000] text-xs">{error}</div>
+                        </div>
+                      )}
+                    </motion.div>
+                  </motion.div>,
+                  document.body
                 )}
               </div>
             </TerminalPanel>
@@ -1765,6 +2311,10 @@ export default function Home() {
             <div className="flex items-start gap-2">
               <span className="text-[var(--text-primary)]">{'>'}</span>
               <span>Video generation time varies based on complexity and model selection</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-[var(--text-primary)]">{'>'}</span>
+              <span>Use Remix to make targeted adjustments to Sora-2 and Sora-2-Pro videos without starting from scratch</span>
             </div>
             <div className="flex items-start gap-2">
               <span className="text-[var(--text-primary)]">{'>'}</span>

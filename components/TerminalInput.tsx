@@ -1,15 +1,18 @@
+
 'use client';
 
-import { InputHTMLAttributes } from 'react';
+import { InputHTMLAttributes, ReactNode } from 'react';
 
 interface TerminalInputProps extends InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement> {
   label?: string;
+  labelRight?: ReactNode;
   multiline?: boolean;
   rows?: number;
 }
 
 export default function TerminalInput({ 
   label, 
+  labelRight,
   multiline = false,
   rows = 4,
   className = '',
@@ -36,9 +39,12 @@ export default function TerminalInput({
   return (
     <div className="w-full">
       {label && (
-        <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
-          {'>'} {label}
-        </label>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-xs uppercase tracking-widest text-[var(--text-primary)] font-mono">
+            {'>'} {label}
+          </label>
+          {labelRight}
+        </div>
       )}
       {multiline ? (
         <textarea

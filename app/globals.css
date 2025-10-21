@@ -746,6 +746,7 @@ video {
 .wallet-adapter-modal-wrapper {
   background: rgba(0, 0, 0, 0.9) !important;
   backdrop-filter: blur(8px) !important;
+  z-index: 2147483647 !important; /* Ensure above any app headers/overlays */
   max-width: 500px !important;
 }
 

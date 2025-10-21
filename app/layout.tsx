@@ -3,8 +3,7 @@ import "./globals.css";
 import Link from "next/link";
 import WalletProvider from '@/components/WalletProvider';
 
-import HeaderCredits from '@/components/HeaderCredits';
-import WalletControls from '@/components/WalletControls';
+import HeaderRight from '@/components/HeaderRight';
 
 export const metadata: Metadata = {
   title: "SCENYX",
@@ -40,10 +39,7 @@ export default function RootLayout({
                 <span className="text-[var(--accent-cyan)] text-xs sm:text-sm">AI STUDIO</span>
               </div>
 
-              <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-2 sm:gap-4">
-                <HeaderCredits />
-                <WalletControls />
-              </div>
+              <HeaderRight />
             </div>
           </div>
 
