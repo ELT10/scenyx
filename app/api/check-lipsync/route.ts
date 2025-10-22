@@ -6,7 +6,7 @@ import { estimateLipSyncUsdMicros } from '@/lib/pricing';
 import { captureHold } from '@/lib/credits';
 
 // Support both env var names
-const replicateApiToken = process.env.REPLICATE_API_TOKEN || process.env.REPLIT_KEY;
+const replicateApiToken = process.env.REPLIT_KEY;
 
 export async function GET(request: NextRequest) {
   try {

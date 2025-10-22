@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withCreditGuard } from '@/lib/withCreditGuard';
 import { estimateLipSyncUsdMicros } from '@/lib/pricing';
 import { createVideoGeneration } from '@/lib/videoGenerations';
+import { fetchModelStatus } from '@/lib/replicate/modelStatus';
 
 // Support both env var names
-const replicateApiToken = process.env.REPLICATE_API_TOKEN || process.env.REPLIT_KEY;
+const replicateApiToken = process.env.REPLIT_KEY;
 
 export const POST = withCreditGuard<{
   imageUrl?: string;
@@ -58,6 +59,20 @@ export const POST = withCreditGuard<{
       
       console.log('Calling Replicate API:', apiUrl);
       console.log('Input:', JSON.stringify(input, null, 2));
+
+      // Status preflight check to avoid charging for offline (cold) models
+      const modelStatus = await fetchModelStatus(model);
+      if (modelStatus === 'offline') {
+        const res = NextResponse.json(
+          {
+            error: `Model "${model}" is currently offline (cold). Please pick a different model or try again later.`,
+            model,
+            status: modelStatus,
+          },
+          { status: 503 }
+        );
+        return { response: res, usageUsdMicros: 0 };
+      }
 
       const replicateResponse = await fetch(apiUrl, {
         method: 'POST',

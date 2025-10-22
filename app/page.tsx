@@ -13,7 +13,8 @@ import BackgroundEffects from '@/components/BackgroundEffects';
 import TerminalInput from '@/components/TerminalInput';
 import GlitchText from '@/components/GlitchText';
 import CostEstimate from '@/components/CostEstimate';
-import { estimateVideoCredits, estimateChatCredits, estimateLipSyncCredits, estimateTTSCredits, estimateAvatarCredits, formatCredits } from '@/lib/client/pricing';
+import { estimateVideoCredits, estimateChatCredits, estimateLipSyncCredits, estimateTTSCredits, estimateAvatarCredits, estimateVoiceoverScriptCredits, formatCredits, LIPSYNC_PRICING_PER_SECOND_USD_MICROS } from '@/lib/client/pricing';
+import { type ModelStatus } from '@/lib/replicate/modelStatus';
 import { notifyCreditsUpdated } from '@/lib/client/events';
 
 interface VideoStatus {
@@ -128,8 +129,10 @@ export default function Home() {
 
   // Lip sync state
   const [lipSyncScript, setLipSyncScript] = useState('');
+  const [generatingVoiceoverScript, setGeneratingVoiceoverScript] = useState(false);
+  const [voiceoverScriptError, setVoiceoverScriptError] = useState<string | null>(null);
   const [lipSyncVoice, setLipSyncVoice] = useState<'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer'>('nova');
-  const [lipSyncModel, setLipSyncModel] = useState<'bytedance/omni-human' | 'wan-video/wan-2.2-s2v'>('wan-video/wan-2.2-s2v');
+  const [lipSyncModel, setLipSyncModel] = useState<string>('wan-video/wan-2.2-s2v');
   const [lipSyncPrompt, setLipSyncPrompt] = useState('');
   const [lipSyncImageFile, setLipSyncImageFile] = useState<File | null>(null);
   const [lipSyncImagePreview, setLipSyncImagePreview] = useState<string | null>(null);
@@ -145,12 +148,86 @@ export default function Home() {
   const [audioDuration, setAudioDuration] = useState<number>(10); // Default 10 seconds
   const lipSyncPollingRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  type ModelStatus = 'online' | 'offline' | 'unknown';
+  const [isModelModalOpen, setIsModelModalOpen] = useState(false);
+  const [modelStatuses, setModelStatuses] = useState<Record<string, ModelStatus>>({});
+
+  const supportedLipSyncModels = useMemo(() => {
+    const knownModels = Object.keys(LIPSYNC_PRICING_PER_SECOND_USD_MICROS);
+    if (!knownModels.includes('wan-video/wan-2.2-s2v')) {
+      knownModels.unshift('wan-video/wan-2.2-s2v');
+    }
+    return Array.from(new Set(knownModels));
+  }, []);
+
+  const lipSyncModelLabels = useMemo<Record<string, string>>(() => ({
+    'wan-video/wan-2.2-s2v': '[ RECOMMENDED ] WAN-Video 2.2 (Best Value!) 💰',
+    'bytedance/omni-human': '[ HIGH QUALITY ] Omni-Human by ByteDance',
+  }), []);
+
+  const statusStyles = useMemo<Record<ModelStatus, { backgroundColor: string; color: string }>>(() => ({
+    online: {
+      backgroundColor: 'rgba(16,185,129,0.15)',
+      color: '#10B981',
+    },
+    offline: {
+      backgroundColor: 'rgba(239,68,68,0.15)',
+      color: '#EF4444',
+    },
+    unknown: {
+      backgroundColor: 'rgba(99,102,241,0.15)',
+      color: '#6366F1',
+    },
+  }), []);
+
+  const statusLabels = useMemo<Record<ModelStatus, string>>(() => ({
+    online: 'ONLINE',
+    offline: 'OFFLINE',
+    unknown: 'UNKNOWN',
+  }), []);
+
+  const fetchLipSyncModelStatuses = useCallback(async () => {
+    if (!supportedLipSyncModels.length) return;
+    try {
+      const query = encodeURIComponent(supportedLipSyncModels.join(','));
+      const response = await fetch(`/api/replicate/status?models=${query}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+      });
+      if (!response.ok) throw new Error('Failed to fetch model statuses');
+      const data = await response.json();
+      setModelStatuses(data?.statuses || {});
+    } catch (error) {
+      console.warn('Failed to fetch lip sync model statuses:', error);
+      setModelStatuses({});
+    }
+  }, [supportedLipSyncModels]);
+
+  useEffect(() => {
+    if (activeTab === 'lipsync') {
+      fetchLipSyncModelStatuses();
+    }
+  }, [activeTab, fetchLipSyncModelStatuses]);
+
+  useEffect(() => {
+    if (isModelModalOpen) {
+      fetchLipSyncModelStatuses();
+    }
+  }, [isModelModalOpen, fetchLipSyncModelStatuses]);
   
   // Avatar generation state
   const [imageSource, setImageSource] = useState<'upload' | 'ai'>('upload');
+  const [audioSource, setAudioSource] = useState<'tts' | 'upload'>('tts');
+  const [avatarType, setAvatarType] = useState<'face' | 'full-body'>('face');
   const [avatarPrompt, setAvatarPrompt] = useState('');
+  const [enhancingAvatarPrompt, setEnhancingAvatarPrompt] = useState(false);
+  const [avatarEnhanceError, setAvatarEnhanceError] = useState<string | null>(null);
   const [generatingAvatar, setGeneratingAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [generatedAvatarUrl, setGeneratedAvatarUrl] = useState<string | null>(null);
 
   // Cost estimates
   const videoCost = useMemo(() => {
@@ -189,6 +266,10 @@ export default function Home() {
 
   const avatarCost = useMemo(() => {
     return estimateAvatarCredits();
+  }, []);
+
+  const voiceoverScriptCost = useMemo(() => {
+    return estimateVoiceoverScriptCredits();
   }, []);
 
   // Enhance Prompt estimated credits (mirrors server-side rough token estimate)
@@ -929,35 +1010,113 @@ export default function Home() {
         body: JSON.stringify({
           prompt: avatarPrompt,
           aspect_ratio: '4:3',
+          avatar_type: avatarType,
         }),
       });
 
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate avatar');
-      }
-
-      if (data.success && data.image_url) {
-        // Set the generated image as preview
-        setLipSyncImagePreview(data.image_url);
-        
-        // Convert the image URL to a File object for upload
-        const imageResponse = await fetch(data.image_url);
-        const blob = await imageResponse.blob();
-        const file = new File([blob], 'avatar.png', { type: 'image/png' });
-        setLipSyncImageFile(file);
-        
-        // Notify credits updated
-        notifyCreditsUpdated();
+      if (response.ok && data.success) {
+        if (data.image_url) {
+          setGeneratedAvatarUrl(data.image_url);
+          setAvatarError(null);
+          console.log('Avatar generated successfully');
+        } else {
+          throw new Error('No image URL in response');
+        }
       } else {
-        throw new Error('No image URL in response');
+        throw new Error(data.error || 'Generation failed');
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      setAvatarError(`GENERATION FAILED: ${message}`);
+    } catch (error) {
+      console.error('Avatar generation failed:', error);
+      setAvatarError(error instanceof Error ? error.message : 'Failed to generate avatar');
     } finally {
       setGeneratingAvatar(false);
+    }
+  };
+
+  const enhanceAvatarPrompt = async () => {
+    if (!avatarPrompt.trim()) {
+      setAvatarEnhanceError('Please enter a description to enhance');
+      return;
+    }
+
+    if (!publicKey) {
+      setAvatarEnhanceError('Wallet not connected');
+      return;
+    }
+
+    try {
+      setEnhancingAvatarPrompt(true);
+      setAvatarEnhanceError(null);
+
+      const response = await fetch('/api/enhance-avatar-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: avatarPrompt }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to enhance prompt');
+      }
+
+      setAvatarPrompt(data.enhanced_prompt);
+      console.log('Avatar prompt enhanced:', data.enhanced_prompt);
+    } catch (error) {
+      console.error('Enhance avatar prompt failed:', error);
+      setAvatarEnhanceError(error instanceof Error ? error.message : 'Failed to enhance');
+    } finally {
+      setEnhancingAvatarPrompt(false);
+    }
+  };
+
+  const clearAvatar = () => {
+    setGeneratedAvatarUrl(null);
+    // Optionally clear prompt: setAvatarPrompt('');
+    setAvatarError(null);
+    setAvatarEnhanceError(null);
+  };
+
+  const generateVoiceoverScript = async () => {
+    if (!lipSyncScript.trim()) {
+      setVoiceoverScriptError('Please enter a rough idea or description');
+      return;
+    }
+
+    if (!publicKey) {
+      setVoiceoverScriptError('Wallet not connected');
+      return;
+    }
+
+    try {
+      setGeneratingVoiceoverScript(true);
+      setVoiceoverScriptError(null);
+
+      const response = await fetch('/api/generate-voiceover-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          idea: lipSyncScript,
+          duration: 30 // default 30 seconds
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to generate script');
+      }
+
+      setLipSyncScript(data.script);
+      console.log('Voiceover script generated:', data.script);
+      console.log('Estimated duration:', data.estimated_duration, 'seconds');
+    } catch (error) {
+      console.error('Generate voiceover script failed:', error);
+      setVoiceoverScriptError(error instanceof Error ? error.message : 'Failed to generate script');
+    } finally {
+      setGeneratingVoiceoverScript(false);
     }
   };
 
@@ -1176,8 +1335,16 @@ export default function Home() {
       return;
     }
 
-    if (!lipSyncImagePreview) {
-      setLipSyncError('Please upload an image');
+    const currentStatus = modelStatuses[lipSyncModel];
+    if (currentStatus === 'offline') {
+      setLipSyncError('Selected model is offline. Please choose a different model or try again later.');
+      return;
+    }
+
+    // Use generated avatar if available, otherwise use uploaded image
+    const imageUrl = generatedAvatarUrl || lipSyncImagePreview;
+    if (!imageUrl) {
+      setLipSyncError('Please upload an image or generate an avatar');
       return;
     }
 
@@ -1193,7 +1360,7 @@ export default function Home() {
 
     try {
       const requestBody: any = {
-        imageUrl: lipSyncImagePreview,
+        imageUrl: imageUrl,
         audioUrl: lipSyncAudioUrl,
         model: lipSyncModel,
         audioDuration: Math.ceil(audioDuration), // Send actual audio duration for accurate pricing
@@ -1902,15 +2069,33 @@ export default function Home() {
                   <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
                     {'>'} LIP SYNC MODEL
                   </label>
-                  <select
-                    value={lipSyncModel}
-                    onChange={(e) => setLipSyncModel(e.target.value as any)}
-                    disabled={loadingLipSync || loadingTTS}
-                    className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
-                  >
-                    <option value="wan-video/wan-2.2-s2v">[ RECOMMENDED ] WAN-Video 2.2 (Best Value!) 💰</option>
-                    <option value="bytedance/omni-human">[ HIGH QUALITY ] Omni-Human by ByteDance</option>
-                  </select>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsModelModalOpen(true)}
+                      disabled={loadingLipSync || loadingTTS}
+                      className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all text-left"
+                    >
+                    <div className="flex items-center justify-between gap-3">
+                        <span className="flex-1 truncate">{lipSyncModelLabels[lipSyncModel] || lipSyncModel}</span>
+                        <span
+                          className="text-[10px] px-2 py-1 rounded uppercase tracking-wide"
+                          style={statusStyles[(modelStatuses[lipSyncModel] || 'unknown') as ModelStatus]}
+                        >
+                          {statusLabels[(modelStatuses[lipSyncModel] || 'unknown') as ModelStatus]}
+                        </span>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fetchLipSyncModelStatuses()}
+                      disabled={loadingLipSync || loadingTTS}
+                      className="inline-flex items-center justify-center border border-[var(--border-dim)] px-3 py-2 text-xs uppercase tracking-wider text-[var(--text-muted)] hover:border-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      title="Refresh model statuses"
+                    >
+                      Refresh
+                    </button>
+                  </div>
                 </div>
 
                 {/* Prompt for WAN-Video model */}
@@ -1934,7 +2119,7 @@ export default function Home() {
                 )}
 
                 {/* Image Source Selection */}
-                <div>
+                <div className="border border-[var(--border-dim)] p-4 sm:p-6 bg-[#20192e]">
                   <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-4 font-mono">
                     {'>'} IMAGE SOURCE
                   </label>
@@ -2009,18 +2194,76 @@ export default function Home() {
                     <div className="space-y-4">
                       <div>
                         <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
+                          AVATAR TYPE
+                        </label>
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                          <button
+                            onClick={() => setAvatarType('face')}
+                            disabled={loadingLipSync || loadingTTS || generatingAvatar}
+                            className={`p-3 border-2 transition-all ${
+                              avatarType === 'face'
+                                ? 'border-[var(--border-primary)] bg-[#0a2029] text-[var(--text-primary)]'
+                                : 'border-[var(--border-dim)] bg-black bg-opacity-40 hover:border-[var(--text-muted)] text-[var(--text-muted)]'
+                            }`}
+                          >
+                            <div className="text-center">
+                              <div className="text-xl mb-1">👤</div>
+                              <div className="text-xs font-mono uppercase tracking-wide">
+                                Just Face
+                              </div>
+                            </div>
+                          </button>
+                          <button
+                            onClick={() => setAvatarType('full-body')}
+                            disabled={loadingLipSync || loadingTTS || generatingAvatar}
+                            className={`p-3 border-2 transition-all ${
+                              avatarType === 'full-body'
+                                ? 'border-[var(--border-primary)] bg-[#0a2029] text-[var(--text-primary)]'
+                                : 'border-[var(--border-dim)] bg-black bg-opacity-40 hover:border-[var(--text-muted)] text-[var(--text-muted)]'
+                            }`}
+                          >
+                            <div className="text-center">
+                              <div className="text-xl mb-1">🧍</div>
+                              <div className="text-xs font-mono uppercase tracking-wide">
+                                Full Body
+                              </div>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
                           DESCRIBE YOUR AVATAR
                         </label>
-                        <input
-                          type="text"
-                          placeholder="e.g., young woman with brown hair, professional businessman, elderly man with beard..."
-                          value={avatarPrompt}
-                          onChange={(e) => setAvatarPrompt(e.target.value)}
-                          disabled={loadingLipSync || loadingTTS || generatingAvatar}
-                          className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all placeholder:text-[var(--text-muted)]"
-                        />
-                        <p className="text-xs text-[var(--text-muted)] mt-2">
-                          💡 Be descriptive: age, gender, hair style, clothing, ethnicity, etc.
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder={avatarType === 'face' 
+                              ? "e.g., young woman with brown hair, professional businessman, elderly man with beard..." 
+                              : "e.g., athletic woman in yoga outfit, businessman in suit standing confidently, dancer in motion..."}
+                            value={avatarPrompt}
+                            onChange={(e) => setAvatarPrompt(e.target.value)}
+                            disabled={loadingLipSync || loadingTTS || generatingAvatar || enhancingAvatarPrompt}
+                            className="flex-1 bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all placeholder:text-[var(--text-muted)]"
+                          />
+                          <button
+                            onClick={enhanceAvatarPrompt}
+                            disabled={enhancingAvatarPrompt || !avatarPrompt.trim() || generatingAvatar || loadingLipSync || loadingTTS}
+                            className="text-[10px] uppercase tracking-wider px-3 py-3 border border-[var(--border-dim)] text-[var(--text-muted)] hover:border-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] transition-colors flex items-center gap-1 min-w-[120px] justify-center disabled:opacity-50"
+                            title="Enhance your prompt for better avatar results"
+                          >
+                            <span>{enhancingAvatarPrompt ? 'ENHANCING...' : 'ENHANCE'}</span>
+                            <span className="text-[8px]">~0.001 CR</span>
+                          </button>
+                        </div>
+                        {avatarEnhanceError && (
+                          <p className="text-xs text-red-400 mt-1 ml-1">{avatarEnhanceError}</p>
+                        )}
+                        <p className="text-xs text-[var(--text-muted)] mt-2 ml-1">
+                          💡 Be descriptive: {avatarType === 'face' 
+                            ? 'age, gender, hair style, facial features, ethnicity, etc.' 
+                            : 'age, gender, clothing, pose, body type, setting, etc.'}
                         </p>
                       </div>
 
@@ -2031,16 +2274,66 @@ export default function Home() {
 
                       <GlowButton
                         onClick={generateAvatar}
-                        disabled={generatingAvatar || !avatarPrompt.trim() || loadingLipSync || loadingTTS}
+                        disabled={generatingAvatar || loadingLipSync || loadingTTS}
                         loading={generatingAvatar}
                         className="w-full"
                       >
-                        {generatingAvatar ? 'GENERATING AVATAR...' : 'GENERATE AVATAR'}
+                        {generatingAvatar ? (generatedAvatarUrl ? 'REGENERATING...' : 'GENERATING AVATAR...') : 'GENERATE AVATAR'}
                       </GlowButton>
 
                       {avatarError && (
                         <div className="p-3 bg-red-500 bg-opacity-10 border border-red-500 text-red-400 text-xs font-mono">
                           {avatarError}
+                        </div>
+                      )}
+
+                      {generatedAvatarUrl && (
+                        <div className="space-y-4 mt-4">
+                          {/* Generated Avatar Image */}
+                          <div className="relative bg-black bg-opacity-20 border border-[var(--border-dim)] rounded-lg overflow-hidden">
+                            <img 
+                              src={generatedAvatarUrl} 
+                              alt="Generated Avatar" 
+                              className="w-full max-w-md mx-auto block aspect-square object-cover"
+                              onLoad={() => console.log('Avatar image loaded')}
+                            />
+                            {/* Clear button overlay in corner */}
+                            <button
+                              onClick={clearAvatar}
+                              className="absolute top-2 right-2 p-2 bg-black bg-opacity-50 hover:bg-opacity-70 text-white rounded-full text-xs transition-all"
+                              title="Clear generated avatar"
+                            >
+                              ×
+                            </button>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex flex-col sm:flex-row gap-3">
+                            {/* Download Button */}
+                            <a
+                              href={generatedAvatarUrl}
+                              download="scenyx-avatar.png"
+                              className="flex-1 flex items-center justify-center text-center py-3 px-4 bg-[var(--accent-cyan)] text-black font-bold hover:bg-opacity-90 transition-colors text-sm uppercase tracking-wide"
+                            >
+                              DOWNLOAD AVATAR
+                            </a>
+
+                            {/* Regenerate Button */}
+                            <GlowButton
+                              onClick={generateAvatar}
+                              disabled={generatingAvatar || loadingLipSync || loadingTTS}
+                              loading={generatingAvatar}
+                              className="flex-1"
+                            >
+                              {generatingAvatar ? 'REGENERATING...' : 'REGENERATE'}
+                              <span className="text-xs opacity-70 ml-1"> ~{formatCredits(avatarCost)} CR</span>
+                            </GlowButton>
+                          </div>
+
+                          {/* Cost Note for Regenerate */}
+                          <p className="text-xs text-[var(--text-muted)] text-center">
+                            Regenerate creates a new avatar from your current prompt (same cost as initial generation)
+                          </p>
                         </div>
                       )}
                     </div>
@@ -2064,73 +2357,150 @@ export default function Home() {
                   )}
                 </div>
 
-                {/* Script Input or Audio Upload */}
-                <div className="border border-[var(--border-dim)] p-4 sm:p-6 bg-black bg-opacity-40">
-                  <h3 className="text-sm uppercase tracking-widest text-[var(--text-primary)] mb-4 font-mono">
+                {/* Audio Source Selection */}
+                <div className="border border-[var(--border-dim)] p-4 sm:p-6 bg-[#3c324d]">
+                  <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-4 font-mono">
                     {'>'} AUDIO SOURCE
-                  </h3>
+                  </label>
                   
-                  {/* Option 1: Generate from Script */}
-                  <div className="space-y-4 mb-6">
-                    <label className="block text-xs uppercase tracking-widest text-[var(--text-muted)] mb-2 font-mono">
-                      OPTION 1: GENERATE FROM SCRIPT
-                    </label>
-                    <TerminalInput
-                      label="SCRIPT TEXT"
-                      placeholder="Enter your script here..."
-                      multiline
-                      rows={4}
-                      value={lipSyncScript}
-                      onChange={(e) => setLipSyncScript(e.target.value)}
+                  {/* Selection Boxes */}
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <button
+                      onClick={() => {
+                        setAudioSource('tts');
+                        setLipSyncError(null);
+                      }}
                       disabled={loadingLipSync || loadingTTS}
-                    />
-                    
-                    <div>
-                      <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
-                        {'>'} VOICE SELECTION
-                      </label>
-                      <select
-                        value={lipSyncVoice}
-                        onChange={(e) => setLipSyncVoice(e.target.value as any)}
-                        disabled={loadingLipSync || loadingTTS}
-                        className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
-                      >
-                        <option value="alloy">[ ALLOY ] Neutral</option>
-                        <option value="echo">[ ECHO ] Male</option>
-                        <option value="fable">[ FABLE ] British Male</option>
-                        <option value="onyx">[ ONYX ] Deep Male</option>
-                        <option value="nova">[ NOVA ] Female (Default)</option>
-                        <option value="shimmer">[ SHIMMER ] Soft Female</option>
-                      </select>
-                    </div>
-
-                    <CostEstimate 
-                      credits={ttsCost} 
-                      operation="Text-to-Speech" 
-                    />
-
-                    <GlowButton
-                      onClick={generateTTS}
-                      disabled={loadingTTS || !lipSyncScript.trim() || loadingLipSync}
-                      loading={loadingTTS}
-                      className="w-full"
+                      className={`p-6 border-2 transition-all ${
+                        audioSource === 'tts'
+                          ? 'border-[var(--border-primary)] bg-[#0a2029]'
+                          : 'border-[var(--border-dim)] bg-black bg-opacity-40 hover:border-[var(--text-muted)]'
+                      }`}
                     >
-                      {loadingTTS ? 'GENERATING AUDIO...' : '[ GENERATE VOICEOVER ]'}
-                    </GlowButton>
+                      <div className="text-center">
+                        <div className="text-2xl mb-2">🎙️</div>
+                        <div className="text-sm font-mono uppercase tracking-wide text-[var(--text-primary)]">
+                          Generate from Script
+                        </div>
+                        <div className="text-xs text-[var(--text-muted)] mt-1">
+                          AI Text-to-Speech
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setAudioSource('upload');
+                        setLipSyncError(null);
+                      }}
+                      disabled={loadingLipSync || loadingTTS}
+                      className={`p-6 border-2 transition-all ${
+                        audioSource === 'upload'
+                          ? 'border-[var(--border-primary)] bg-[#0a2029]'
+                          : 'border-[var(--border-dim)] bg-black bg-opacity-40 hover:border-[var(--text-muted)]'
+                      }`}
+                    >
+                      <div className="text-center">
+                        <div className="text-2xl mb-2">📁</div>
+                        <div className="text-sm font-mono uppercase tracking-wide text-[var(--text-primary)]">
+                          Upload Audio File
+                        </div>
+                        <div className="text-xs text-[var(--text-muted)] mt-1">
+                          MP3, WAV, etc.
+                        </div>
+                      </div>
+                    </button>
                   </div>
 
-                  <div className="border-t border-[var(--border-dim)] pt-6">
-                    <label className="block text-xs uppercase tracking-widest text-[var(--text-muted)] mb-2 font-mono">
-                      OPTION 2: UPLOAD AUDIO FILE
-                    </label>
-                    <input
-                      type="file"
-                      accept="audio/*"
-                      onChange={handleAudioFileChange}
-                      disabled={loadingLipSync || loadingTTS}
-                      className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all file:mr-4 file:py-2 file:px-4 file:border-0 file:text-sm file:font-mono file:bg-[var(--text-primary)] file:text-black hover:file:opacity-80"
-                    />
-                  </div>
+                  {/* TTS Flow */}
+                  {audioSource === 'tts' && (
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] font-mono">
+                            SCRIPT TEXT
+                          </label>
+                          <button
+                            onClick={generateVoiceoverScript}
+                            disabled={generatingVoiceoverScript || !lipSyncScript.trim() || loadingLipSync || loadingTTS}
+                            className="text-[10px] uppercase tracking-wider px-3 py-2 border border-[#716f6f] text-[#ccc] hover:border-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] transition-colors flex items-center gap-1 disabled:opacity-50"
+                            title="Generate a professional voiceover script from your idea"
+                          >
+                            <span>{generatingVoiceoverScript ? 'GENERATING...' : 'GENERATE SCRIPT'}</span>
+                            <span className="text-[8px]">{formatCredits(voiceoverScriptCost)} CR</span>
+                          </button>
+                        </div>
+                        <textarea
+                          placeholder="Enter your script here, or add a rough idea and click 'Generate Script'..."
+                          value={lipSyncScript}
+                          onChange={(e) => setLipSyncScript(e.target.value)}
+                          disabled={loadingLipSync || loadingTTS || generatingVoiceoverScript}
+                          rows={4}
+                          className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all placeholder:text-[var(--text-muted)] resize-none"
+                        />
+                        {voiceoverScriptError && (
+                          <p className="text-xs text-red-400 mt-1">{voiceoverScriptError}</p>
+                        )}
+                        <p className="text-xs text-[#989898] mt-2">
+                          Tip: Add a rough idea and click "Generate Script" for a professional voiceover, or write your own script directly.
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
+                          {'>'} VOICE SELECTION
+                        </label>
+                        <select
+                          value={lipSyncVoice}
+                          onChange={(e) => setLipSyncVoice(e.target.value as any)}
+                          disabled={loadingLipSync || loadingTTS}
+                          className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
+                        >
+                          <option value="alloy">[ ALLOY ] Neutral</option>
+                          <option value="echo">[ ECHO ] Male</option>
+                          <option value="fable">[ FABLE ] British Male</option>
+                          <option value="onyx">[ ONYX ] Deep Male</option>
+                          <option value="nova">[ NOVA ] Female (Default)</option>
+                          <option value="shimmer">[ SHIMMER ] Soft Female</option>
+                        </select>
+                      </div>
+
+                      <CostEstimate 
+                        credits={ttsCost} 
+                        operation="Text-to-Speech" 
+                      />
+
+                      <GlowButton
+                        onClick={generateTTS}
+                        disabled={loadingTTS || !lipSyncScript.trim() || loadingLipSync}
+                        loading={loadingTTS}
+                        className="w-full"
+                      >
+                        {loadingTTS ? 'GENERATING AUDIO...' : '[ GENERATE VOICEOVER ]'}
+                      </GlowButton>
+                    </div>
+                  )}
+
+                  {/* Upload Flow */}
+                  {audioSource === 'upload' && (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs uppercase tracking-widest text-[var(--text-primary)] mb-2 font-mono">
+                          UPLOAD AUDIO FILE
+                        </label>
+                        <input
+                          type="file"
+                          accept="audio/*"
+                          onChange={handleAudioFileChange}
+                          disabled={loadingLipSync || loadingTTS}
+                          className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all file:mr-4 file:py-2 file:px-4 file:border-0 file:text-sm file:font-mono file:bg-[var(--text-primary)] file:text-black hover:file:opacity-80"
+                        />
+                        <p className="text-xs text-[#989898] mt-2">
+                           Supported formats: MP3, WAV, M4A, FLAC
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Audio Preview */}
                   {lipSyncAudioUrl && (
@@ -2139,8 +2509,18 @@ export default function Home() {
                         <div className="text-xs uppercase tracking-wide text-[var(--text-primary)]">
                           AUDIO PREVIEW:
                         </div>
-                        <div className="text-xs text-[var(--accent-cyan)] font-mono">
-                          DURATION: {audioDuration}s
+                        <div className="flex items-center gap-3">
+                          <div className="text-xs text-[var(--accent-cyan)] font-mono">
+                            DURATION: {audioDuration}s
+                          </div>
+                          <a
+                            href={lipSyncAudioUrl}
+                            download="scenyx-voiceover.mp3"
+                            className="text-xs uppercase tracking-wider px-3 py-1 bg-[var(--accent-cyan)] text-black font-bold hover:bg-opacity-80 transition-colors"
+                            title="Download audio file"
+                          >
+                            DOWNLOAD
+                          </a>
                         </div>
                       </div>
                       <audio 
@@ -2168,12 +2548,19 @@ export default function Home() {
 
                 <GlowButton
                   onClick={generateLipSync}
-                  disabled={loadingLipSync || !lipSyncImagePreview || !lipSyncAudioUrl}
+                  disabled={loadingLipSync || (!lipSyncImagePreview && !generatedAvatarUrl) || !lipSyncAudioUrl}
                   loading={loadingLipSync}
                   className="w-full"
                 >
                   {loadingLipSync ? `GENERATING... ${lipSyncProgress}%` : '[ GENERATE LIP SYNC VIDEO ]'}
                 </GlowButton>
+
+                {/* Generation Time Notice */}
+                <div className="mt-3 p-3 bg-yellow-500 bg-opacity-10 border border-yellow-500 border-opacity-30 rounded">
+                  <p className="text-xs text-yellow-200 text-center">
+                    ⏱️ Generation time: 5-10 minutes depending on audio length. Please be patient.
+                  </p>
+                </div>
 
                 {/* Progress Display */}
                 {loadingLipSync && lipSyncPredictionId && (
@@ -2244,6 +2631,77 @@ export default function Home() {
               </div>
             </TerminalPanel>
           </motion.div>
+        )}
+
+        {isModelModalOpen && (
+          <div
+            className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 px-4"
+            onClick={() => setIsModelModalOpen(false)}
+          >
+            <div
+              className="w-full max-w-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-5"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm uppercase tracking-widest text-[var(--text-primary)] font-mono">
+                  {'>'} Select Lip Sync Model
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsModelModalOpen(false)}
+                  className="text-xs uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--accent-cyan)]"
+                >
+                  Close
+                </button>
+              </div>
+              <div className="space-y-3">
+                {supportedLipSyncModels.map((modelSlug) => {
+                  const status = (modelStatuses[modelSlug] || 'unknown') as ModelStatus;
+                  const offline = status === 'offline';
+                  const statusStyle = statusStyles[status];
+                  return (
+                    <button
+                      key={modelSlug}
+                      type="button"
+                      onClick={() => {
+                        if (offline) {
+                          setLipSyncError('This model is idle right now and might not be booted up. Could result in loss of funds and major delay.');
+                          return;
+                        }
+                        setLipSyncModel(modelSlug);
+                        setIsModelModalOpen(false);
+                      }}
+                      disabled={offline}
+                      className={`w-full border px-4 py-3 text-left transition-all ${
+                        offline
+                          ? 'border-[var(--border-dim)] opacity-60 cursor-not-allowed'
+                          : 'border-[var(--border-dim)] hover:border-[var(--border-primary)]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-mono uppercase text-[var(--text-primary)] truncate">
+                            {lipSyncModelLabels[modelSlug] || modelSlug}
+                          </p>
+                          {offline && (
+                            <p className="text-xs text-[var(--text-muted)] mt-1">
+                              This model is idle right now and might not be booted up. Could result in loss of funds and major delay.
+                            </p>
+                          )}
+                        </div>
+                        <span
+                          className="text-[10px] px-2 py-1 rounded uppercase tracking-wide"
+                          style={statusStyle}
+                        >
+                          {statusLabels[status]}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         )}
 
         {activeTab === 'view' && (
@@ -2328,8 +2786,8 @@ export default function Home() {
                                   setPreviews((p) => ({ ...p, [item.video_id]: { loading: false, error: e.message || 'Failed to load' } }));
                                 }
                               }}
-                              disabled={(item.status !== 'completed' && !preview.url) || isExpired && !preview.url || preview.loading}
-                            className="flex-1 text-center border border-[var(--border-dim)] text-[var(--text-muted)] px-2.5 sm:px-3 py-2 text-[10px] uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] disabled:opacity-40"
+                      disabled={((item.status !== 'completed' && !preview.url) || (isExpired && !preview.url) || preview.loading)}
+                      className="flex-1 text-center border border-[var(--border-dim)] text-[var(--text-muted)] px-2.5 sm:px-3 py-2 text-[10px] uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] disabled:opacity-40"
                             >
                               {preview.loading ? 'LOADING…' : '[ VIEW ]'}
                             </button>

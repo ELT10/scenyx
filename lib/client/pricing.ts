@@ -11,10 +11,12 @@ export type ModelPricing = {
 // GPT-5: $1.25/1M input, $10.00/1M output
 // GPT-5-mini: $0.25/1M input, $2.00/1M output
 // GPT-5-nano: $0.05/1M input, $0.40/1M output
+// GPT-4o-mini: $0.15/1M input, $0.60/1M output
 export const PRICING: Record<string, ModelPricing> = {
   'gpt-5': { inputPer1kUsdMicros: 1250, outputPer1kUsdMicros: 10000 },           // $1.25/1M → $0.00125/1k
   'gpt-5-mini': { inputPer1kUsdMicros: 250, outputPer1kUsdMicros: 2000 },        // $0.25/1M → $0.00025/1k
   'gpt-5-nano': { inputPer1kUsdMicros: 50, outputPer1kUsdMicros: 400 },          // $0.05/1M → $0.00005/1k
+  'gpt-4o-mini': { inputPer1kUsdMicros: 150, outputPer1kUsdMicros: 600 },        // $0.15/1M → $0.00015/1k
 };
 
 // Video pricing per second varies by resolution
@@ -133,6 +135,24 @@ export function estimateTTSCredits(textLength: number): number {
 export function estimateAvatarCredits(): number {
   const totalUsd = AVATAR_GENERATION_USD_MICROS / 1_000_000;
   const credits = totalUsd / DEFAULT_CREDIT_USD_VALUE;
+  return Math.ceil(credits * 1_000_000) / 1_000_000;
+}
+
+/**
+ * Calculate estimated credits for voiceover script generation (gpt-4o-mini)
+ * Typical usage: ~200 input tokens, ~150 output tokens
+ */
+export function estimateVoiceoverScriptCredits(): number {
+  const p = PRICING['gpt-4o-mini'];
+  if (!p || !p.inputPer1kUsdMicros || !p.outputPer1kUsdMicros) return 0.001;
+  
+  const inputCostMicros = Math.ceil((200 / 1000) * p.inputPer1kUsdMicros);
+  const outputCostMicros = Math.ceil((150 / 1000) * p.outputPer1kUsdMicros);
+  const totalUsdMicros = inputCostMicros + outputCostMicros;
+  
+  const totalUsd = totalUsdMicros / 1_000_000;
+  const credits = totalUsd / DEFAULT_CREDIT_USD_VALUE;
+  
   return Math.ceil(credits * 1_000_000) / 1_000_000;
 }
 
