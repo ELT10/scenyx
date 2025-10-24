@@ -120,7 +120,7 @@ Remix: "Add a light layer of fog in the valleys"
 ## Limitations
 1. Only works with completed videos
 2. Only supports sora-2 and sora-2-pro models
-3. Videos must not be expired (within 24-hour window)
+3. Videos must not be expired (within 1-hour window)
 4. One change per remix recommended for best results
 
 ## Future Enhancements

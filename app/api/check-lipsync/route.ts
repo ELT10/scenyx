@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 import { NextRequest, NextResponse } from 'next/server';
-import { finalizeVideoGeneration, getVideoGeneration } from '@/lib/videoGenerations';
+import { finalizeVideoGeneration, getVideoGeneration, updateVideoUrl } from '@/lib/videoGenerations';
 import { estimateLipSyncUsdMicros } from '@/lib/pricing';
 import { captureHold } from '@/lib/credits';
 
@@ -50,6 +50,19 @@ export async function GET(request: NextRequest) {
 
     const prediction = await response.json();
 
+    // Extract video URL for easier frontend access
+    let videoUrl: string | null = null;
+    if (prediction.output) {
+      if (typeof prediction.output === 'string') {
+        videoUrl = prediction.output;
+      } else if (Array.isArray(prediction.output) && prediction.output.length > 0) {
+        videoUrl = prediction.output[0];
+      } else if (typeof prediction.output === 'object' && prediction.output.url) {
+        videoUrl = prediction.output.url;
+      }
+      console.log('📊 Extracted Replicate video URL:', videoUrl ? videoUrl.substring(0, 80) + '...' : 'null');
+    }
+
     // Check if this prediction has a hold that needs to be captured
     // We'll use the video_generations table to track lip sync holds too
     const videoGen = await getVideoGeneration(predictionId);
@@ -74,6 +87,18 @@ export async function GET(request: NextRequest) {
           undefined
         );
         
+        // Store the video URL for sharing (critical for Replicate videos)
+        if (videoUrl) {
+          console.log('💾 Storing Replicate video URL in database...');
+          console.log('   - Video ID:', predictionId);
+          console.log('   - URL length:', videoUrl.length, 'characters');
+          console.log('   - URL preview:', videoUrl.substring(0, 100) + '...');
+          await updateVideoUrl(predictionId, videoUrl);
+          console.log('✅ Video URL stored successfully');
+        } else {
+          console.warn('⚠️ No video URL to store for prediction:', predictionId);
+        }
+        
         console.log('✅ Hold captured for lip sync:', predictionId);
       } catch (error: any) {
         console.error('❌ Failed to capture hold for lip sync:', error);
@@ -96,17 +121,17 @@ export async function GET(request: NextRequest) {
       } catch (error: any) {
         console.error('❌ Failed to release hold for lip sync:', error);
       }
-    }
-
-    // Extract video URL for easier frontend access
-    let videoUrl: string | null = null;
-    if (prediction.output) {
-      if (typeof prediction.output === 'string') {
-        videoUrl = prediction.output;
-      } else if (Array.isArray(prediction.output) && prediction.output.length > 0) {
-        videoUrl = prediction.output[0];
-      } else if (typeof prediction.output === 'object' && prediction.output.url) {
-        videoUrl = prediction.output.url;
+    } else if (videoGen && prediction.status === 'succeeded' && videoUrl && !videoGen.video_url) {
+      // If video is completed but URL not yet stored (e.g., no hold tracking), store it now
+      try {
+        console.log('💾 Storing Replicate video URL (no hold)...');
+        console.log('   - Video ID:', predictionId);
+        console.log('   - URL length:', videoUrl.length, 'characters');
+        await updateVideoUrl(predictionId, videoUrl);
+        console.log('✅ Video URL stored successfully (no hold)');
+      } catch (error: any) {
+        console.error('❌ Failed to store video URL:', error);
+        console.error('   - Error details:', error.message);
       }
     }
 

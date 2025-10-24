@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { useRouter, usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useWallet } from '@solana/wallet-adapter-react';
 import TerminalPanel from '@/components/TerminalPanel';
@@ -16,6 +17,29 @@ import CostEstimate from '@/components/CostEstimate';
 import { estimateVideoCredits, estimateChatCredits, estimateLipSyncCredits, estimateTTSCredits, estimateAvatarCredits, estimateVoiceoverScriptCredits, formatCredits, LIPSYNC_PRICING_PER_SECOND_USD_MICROS } from '@/lib/client/pricing';
 import { type ModelStatus } from '@/lib/replicate/modelStatus';
 import { notifyCreditsUpdated } from '@/lib/client/events';
+
+type TabKey = 'generate' | 'view' | 'script' | 'lipsync';
+
+const TAB_TO_PATH: Record<TabKey, string> = {
+  script: '/script-gen',
+  generate: '/video-gen',
+  lipsync: '/lip-sync',
+  view: '/archive',
+};
+
+const PATH_TO_TAB: Record<string, TabKey> = {
+  '/': 'generate',
+  '/script-gen': 'script',
+  '/video-gen': 'generate',
+  '/lip-sync': 'lipsync',
+  '/archive': 'view',
+};
+
+function resolveTabFromPath(pathname?: string | null): TabKey {
+  if (!pathname) return 'generate';
+  const trimmed = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+  return PATH_TO_TAB[trimmed] ?? 'generate';
+}
 
 interface VideoStatus {
   video_id: string;
@@ -39,11 +63,14 @@ interface Thread {
 }
 
 export default function Home() {
+  const router = useRouter();
+  const pathname = usePathname();
+
   // Wallet connection
   const { publicKey } = useWallet();
   
   // Tab state
-  const [activeTab, setActiveTab] = useState<'generate' | 'view' | 'script' | 'lipsync'>('generate');
+  const [activeTab, setActiveTab] = useState<TabKey>(() => resolveTabFromPath(pathname));
   const tabScrollRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = {
     script: useRef<HTMLButtonElement | null>(null),
@@ -51,6 +78,21 @@ export default function Home() {
     lipsync: useRef<HTMLButtonElement | null>(null),
     view: useRef<HTMLButtonElement | null>(null),
   } as const;
+
+  useEffect(() => {
+    const resolved = resolveTabFromPath(pathname);
+    if (resolved !== activeTab) {
+      setActiveTab(resolved);
+    }
+  }, [pathname, activeTab]);
+
+  const switchTab = useCallback((tab: TabKey) => {
+    setActiveTab(tab);
+    const targetPath = TAB_TO_PATH[tab];
+    if (pathname !== targetPath) {
+      router.push(targetPath);
+    }
+  }, [router, pathname]);
 
   // Generate video state
   const [prompt, setPrompt] = useState('');
@@ -97,11 +139,13 @@ export default function Home() {
     source: 'replicate' | 'openai';
     expiresAt: string; // ISO
     remainingHours: number;
+    video_url?: string | null;
   }
   const [archiveItems, setArchiveItems] = useState<ArchiveItem[]>([]);
   const [loadingArchive, setLoadingArchive] = useState(false);
   const [previews, setPreviews] = useState<Record<string, { url?: string; loading?: boolean; error?: string }>>({});
   const [archiveFetching, setArchiveFetching] = useState<Record<string, boolean>>({});
+  const [copiedVideoId, setCopiedVideoId] = useState<string | null>(null);
   const archivePollingRef = useRef<NodeJS.Timeout | null>(null);
   const archiveItemsRef = useRef<ArchiveItem[]>([]);
 
@@ -132,7 +176,7 @@ export default function Home() {
   const [generatingVoiceoverScript, setGeneratingVoiceoverScript] = useState(false);
   const [voiceoverScriptError, setVoiceoverScriptError] = useState<string | null>(null);
   const [lipSyncVoice, setLipSyncVoice] = useState<'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer'>('nova');
-  const [lipSyncModel, setLipSyncModel] = useState<string>('wan-video/wan-2.2-s2v');
+  const [lipSyncModel, setLipSyncModel] = useState<string>('bytedance/omni-human');
   const [lipSyncPrompt, setLipSyncPrompt] = useState('');
   const [lipSyncImageFile, setLipSyncImageFile] = useState<File | null>(null);
   const [lipSyncImagePreview, setLipSyncImagePreview] = useState<string | null>(null);
@@ -161,7 +205,7 @@ export default function Home() {
   }, []);
 
   const lipSyncModelLabels = useMemo<Record<string, string>>(() => ({
-    'wan-video/wan-2.2-s2v': '[ RECOMMENDED ] WAN-Video 2.2 (Best Value!) 💰',
+    'wan-video/wan-2.2-s2v': '[ BEST VALUE ] WAN-Video 2.2',
     'bytedance/omni-human': '[ HIGH QUALITY ] Omni-Human by ByteDance',
   }), []);
 
@@ -491,7 +535,7 @@ export default function Home() {
       notifyCreditsUpdated();
 
       // Switch to archive tab to show the new remix being generated
-      setActiveTab('view');
+      switchTab('view');
 
       // Reload archive to show the new remix immediately
       setLoadingArchive(true);
@@ -942,7 +986,7 @@ export default function Home() {
   };
 
   const generateVideoFromScript = () => {
-    setActiveTab('generate');
+    switchTab('generate');
     setPrompt(generatedScript);
     // Transfer orientation and duration settings from script to video generation
     setVideoOrientation(orientation);
@@ -1416,20 +1460,20 @@ export default function Home() {
 
       <div className="relative z-10 container mx-auto px-3 sm:px-4 py-8 max-w-5xl">
         {/* Header */}
-        <motion.div
+        {/* <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-4 sm:mb-7 sm:mt-4"
-        >
+        > */}
           {/* <GlitchText className="text-4xl font-black mb-4">
             SCENYX
           </GlitchText> */}
-          <div className="flex items-center justify-center gap-2 text-[12px] sm:text-sm uppercase tracking-[0.3em]">
+          <div className=" mb-4 sm:mb-7 sm:mt-4 flex items-center justify-center gap-2 text-[12px] sm:text-sm uppercase tracking-[0.3em]">
             <span className="text-[var(--accent-cyan)] hidden sm:block">AI POWERED</span>
             <span className="text-[var(--text-muted)] hidden sm:block">//</span>
             <span className="text-[var(--text-primary)]">VIDEO GENERATION PLATFORM</span>
           </div>
-        </motion.div>
+        {/* </motion.div> */}
 
         {/* Tabs */}
         <div className="relative mb-8">
@@ -1437,28 +1481,28 @@ export default function Home() {
           <div className="tab-fade tab-fade-right"></div>
           <div className="tab-scroll" ref={tabScrollRef}>
             <button
-              onClick={() => setActiveTab('script')}
+              onClick={() => switchTab('script')}
               ref={tabRefs.script}
               className={`tab-button ${activeTab === 'script' ? 'active' : ''}`}
             >
               [ SCRIPT GEN ]
             </button>
             <button
-              onClick={() => setActiveTab('generate')}
+              onClick={() => switchTab('generate')}
               ref={tabRefs.generate}
               className={`tab-button ${activeTab === 'generate' ? 'active' : ''}`}
             >
               [ VIDEO GEN ]
             </button>
             <button
-              onClick={() => setActiveTab('lipsync')}
+              onClick={() => switchTab('lipsync')}
               ref={tabRefs.lipsync}
               className={`tab-button ${activeTab === 'lipsync' ? 'active' : ''}`}
             >
               [ LIP SYNC ]
             </button>
             <button
-              onClick={() => setActiveTab('view')}
+              onClick={() => switchTab('view')}
               ref={tabRefs.view}
               className={`tab-button ${activeTab === 'view' ? 'active' : ''}`}
             >
@@ -2714,7 +2758,7 @@ export default function Home() {
             <TerminalPanel title="RECENT GENERATIONS" status="active">
               <div className="space-y-4">
                 <div className="border border-[var(--border-dim)] bg-black bg-opacity-60 p-3 text-xs text-[var(--text-muted)]">
-                  Lip sync videos are only available for ~1 hour, all other videos for ~24 hours. Download them before they expire.
+                  All videos are only available for ~1 hour. Download them before they expire.
                 </div>
                 {loadingArchive ? (
                   <div className="text-center py-12">
@@ -2768,7 +2812,7 @@ export default function Home() {
                             )}
                           </div>
 
-                          <div className="mt-3 flex gap-2">
+                          <div className="mt-3 flex gap-2 flex-wrap">
                             <button
                               onClick={async () => {
                                 if (isExpired) return;
@@ -2790,6 +2834,22 @@ export default function Home() {
                       className="flex-1 text-center border border-[var(--border-dim)] text-[var(--text-muted)] px-2.5 sm:px-3 py-2 text-[10px] uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] disabled:opacity-40"
                             >
                               {preview.loading ? 'LOADING…' : '[ VIEW ]'}
+                            </button>
+                            <button
+                              onClick={async () => {
+                                const shareUrl = `${window.location.origin}/archive/${item.video_id}`;
+                                try {
+                                  await navigator.clipboard.writeText(shareUrl);
+                                  setCopiedVideoId(item.video_id);
+                                  setTimeout(() => setCopiedVideoId(null), 2000);
+                                } catch (err) {
+                                  console.error('Failed to copy:', err);
+                                }
+                              }}
+                              disabled={item.status !== 'completed' || isExpired}
+                              className="flex-1 text-center border border-[var(--border-dim)] text-[var(--text-muted)] px-2.5 sm:px-3 py-2 text-[10px] uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] disabled:opacity-40"
+                            >
+                              {copiedVideoId === item.video_id ? '[ COPIED! ]' : '[ SHARE ]'}
                             </button>
                             <a
                               href={(preview.url || '')}
@@ -3011,7 +3071,7 @@ export default function Home() {
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="text-[var(--text-primary)]">{'>'}</span>
-                  <span>Download promptly: lip sync videos expire in ~1 hour</span>
+                  <span>Download promptly: all videos expire in ~1 hour</span>
                 </div>
               </>
             )}
@@ -3020,7 +3080,7 @@ export default function Home() {
               <>
                 <div className="flex items-start gap-2">
                   <span className="text-[var(--text-primary)]">{'>'}</span>
-                  <span>Preview and download results here; lip sync ~1h expiry, others ~24h</span>
+                  <span>Preview and download results here; all videos expire in ~1 hour</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="text-[var(--text-primary)]">{'>'}</span>

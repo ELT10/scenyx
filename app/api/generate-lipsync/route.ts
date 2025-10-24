@@ -15,11 +15,11 @@ export const POST = withCreditGuard<{
   audioDuration?: number;
   pollForCompletion?: boolean;
 }>({
-  estimateUsdMicros: async ({ model = 'wan-video/wan-2.2-s2v', audioDuration = 10 }) => {
+  estimateUsdMicros: async ({ model = 'bytedance/omni-human', audioDuration = 10 }) => {
     return estimateLipSyncUsdMicros(model, audioDuration);
   },
   runWithUsageUsdMicros: async (
-    { imageUrl, audioUrl, model = 'wan-video/wan-2.2-s2v', prompt, audioDuration = 10, pollForCompletion = false },
+    { imageUrl, audioUrl, model = 'bytedance/omni-human', prompt, audioDuration = 10, pollForCompletion = false },
     _req,
     context
   ) => {

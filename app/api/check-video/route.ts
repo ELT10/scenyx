@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 import { NextRequest, NextResponse } from 'next/server';
-import { finalizeVideoGeneration, getVideoGeneration, updateVideoGenerationStatus } from '@/lib/videoGenerations';
+import { finalizeVideoGeneration, getVideoGeneration, updateVideoGenerationStatus, updateVideoUrl } from '@/lib/videoGenerations';
 import { releaseHold } from '@/lib/credits';
 
 const OPENAI_API_BASE = 'https://api.openai.com/v1';
@@ -137,6 +137,13 @@ export async function GET(request: NextRequest) {
           const arrayBuffer = await contentResponse.arrayBuffer();
           const buffer = Buffer.from(arrayBuffer);
           const base64Video = buffer.toString('base64');
+          const videoDataUrl = `data:video/mp4;base64,${base64Video}`;
+          
+          console.log('✅ OpenAI video fetched, size:', buffer.length, 'bytes');
+          
+          // Note: We don't store base64 data URLs for OpenAI videos in the database
+          // because they're too large (>800KB) and would exceed PostgreSQL's index limit.
+          // OpenAI videos are fetched on-demand from OpenAI's API.
           
           return NextResponse.json({
             success: true,
@@ -147,7 +154,7 @@ export async function GET(request: NextRequest) {
             created_at: video.created_at,
             seconds: video.seconds,
             size: video.size,
-            video_data: `data:video/mp4;base64,${base64Video}`,
+            video_data: videoDataUrl,
           });
         }
       } catch (contentError) {

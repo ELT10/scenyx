@@ -30,6 +30,7 @@ export interface VideoGenerationStatus {
   charged_amount_microcredits: bigint | null;
   error_code: string | null;
   error_message: string | null;
+  video_url: string | null;
   created_at: string;
   completed_at: string | null;
 }
@@ -165,5 +166,42 @@ export async function getUserVideoGenerations(
   }
 
   return (data || []) as VideoGenerationStatus[];
+}
+
+/**
+ * Update video URL for a completed video
+ * This is especially important for Replicate videos which can't be fetched without auth
+ */
+export async function updateVideoUrl(
+  videoId: string,
+  videoUrl: string
+): Promise<void> {
+  console.log('📝 updateVideoUrl called:');
+  console.log('   - Video ID:', videoId);
+  console.log('   - URL type:', videoUrl.startsWith('data:') ? 'base64 data URL' : 'HTTP URL');
+  console.log('   - URL length:', videoUrl.length, 'characters');
+  console.log('   - URL size:', Math.round(videoUrl.length / 1024), 'KB');
+  
+  if (videoUrl.startsWith('data:')) {
+    console.warn('⚠️ WARNING: Attempting to store base64 data URL in database!');
+    console.warn('   This will fail due to PostgreSQL index size limit (8191 bytes)');
+    console.warn('   Base64 URLs should NOT be stored in video_url column');
+    throw new Error('Cannot store base64 data URLs in database - use only HTTP URLs for Replicate videos');
+  }
+  
+  const { error } = await supabaseAdmin
+    .from('video_generations')
+    .update({
+      video_url: videoUrl,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('video_id', videoId);
+
+  if (error) {
+    console.error('Failed to update video URL:', error);
+    throw new Error(`Failed to update video URL: ${error.message}`);
+  }
+  
+  console.log('✅ Video URL updated successfully in database');
 }
 

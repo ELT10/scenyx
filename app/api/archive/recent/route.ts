@@ -11,6 +11,7 @@ type ArchiveItem = {
   source: 'replicate' | 'openai';
   expiresAt: string; // ISO
   remainingHours: number; // floor
+  video_url?: string | null;
 };
 
 export async function GET(req: NextRequest) {
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from('video_generations')
-    .select('video_id, model, status, seconds, created_at')
+    .select('video_id, model, status, seconds, created_at, video_url')
     .eq('user_id', session.userId)
     .gte('created_at', sinceIso)
     .order('created_at', { ascending: false })
@@ -35,14 +36,14 @@ export async function GET(req: NextRequest) {
   }
 
   const now = Date.now();
-  // Map and compute per-source expiry (Replicate ~1h, OpenAI ~24h)
+  // Map and compute expiry (all videos expire after 1 hour)
   let items: ArchiveItem[] = (data || []).map((row: any) => {
     const created = new Date(row.created_at).getTime();
     const source: 'replicate' | 'openai' =
       row.model?.startsWith('wan-video/') || row.model?.startsWith('bytedance/')
         ? 'replicate'
         : 'openai';
-    const ttlMs = source === 'replicate' ? 1 * 3600 * 1000 : 24 * 3600 * 1000;
+    const ttlMs = 1 * 3600 * 1000; // All videos expire after 1 hour
     const expiresMs = created + ttlMs;
     const remaining = Math.max(0, Math.floor((expiresMs - now) / 3600_000));
     return {
@@ -54,11 +55,12 @@ export async function GET(req: NextRequest) {
       source,
       expiresAt: new Date(expiresMs).toISOString(),
       remainingHours: remaining,
+      video_url: row.video_url ?? null,
     };
   });
 
-  // Filter out expired Replicate items (>1h old)
-  items = items.filter((it) => (it.source === 'replicate' ? Date.parse(it.expiresAt) > now : true));
+  // Filter out all expired items (>1h old)
+  items = items.filter((it) => Date.parse(it.expiresAt) > now);
 
   return NextResponse.json({ items });
 }
