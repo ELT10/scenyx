@@ -64,13 +64,12 @@ interface Thread {
 
 export default function Home() {
   const router = useRouter();
-  const pathname = usePathname();
-
   // Wallet connection
   const { publicKey } = useWallet();
   
-  // Tab state
-  const [activeTab, setActiveTab] = useState<TabKey>(() => resolveTabFromPath(pathname));
+  // Tab state derived from route
+  const pathname = usePathname();
+  const activeTab = useMemo(() => resolveTabFromPath(pathname), [pathname]);
   const tabScrollRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = {
     script: useRef<HTMLButtonElement | null>(null),
@@ -79,15 +78,7 @@ export default function Home() {
     view: useRef<HTMLButtonElement | null>(null),
   } as const;
 
-  useEffect(() => {
-    const resolved = resolveTabFromPath(pathname);
-    if (resolved !== activeTab) {
-      setActiveTab(resolved);
-    }
-  }, [pathname, activeTab]);
-
   const switchTab = useCallback((tab: TabKey) => {
-    setActiveTab(tab);
     const targetPath = TAB_TO_PATH[tab];
     if (pathname !== targetPath) {
       router.push(targetPath);

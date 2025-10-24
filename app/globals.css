@@ -396,6 +396,107 @@ select:focus {
     inset 0 0 5px rgba(255, 255, 255, 0.1);
 }
 
+/* Custom Select Dropdown Styles */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23888888' d='M1.41 0L6 4.59L10.59 0L12 1.41l-6 6l-6-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 15px center;
+  background-size: 12px 8px;
+  padding-right: 45px;
+  cursor: pointer;
+  position: relative;
+}
+
+select:hover {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23ffffff' d='M1.41 0L6 4.59L10.59 0L12 1.41l-6 6l-6-6z'/%3E%3C/svg%3E");
+  border-color: var(--text-secondary);
+}
+
+select:focus {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2300d4ff' d='M1.41 0L6 4.59L10.59 0L12 1.41l-6 6l-6-6z'/%3E%3C/svg%3E");
+  border-color: var(--accent-cyan);
+}
+
+select:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23333333' d='M1.41 0L6 4.59L10.59 0L12 1.41l-6 6l-6-6z'/%3E%3C/svg%3E");
+}
+
+/* Custom Option Styles */
+select option {
+  background: #0a0a0a;
+  color: var(--text-primary);
+  padding: 12px 16px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-dim);
+  transition: all 0.2s ease;
+}
+
+/* Firefox specific option styling */
+@-moz-document url-prefix() {
+  select option {
+    background: #0a0a0a;
+    color: var(--text-primary);
+  }
+  
+  select option:hover {
+    background: rgba(0, 212, 255, 0.15);
+    color: var(--accent-cyan);
+  }
+  
+  select option:checked {
+    background: rgba(0, 212, 255, 0.2);
+    color: var(--accent-cyan);
+  }
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) option styling */
+select option:hover {
+  background: linear-gradient(90deg, rgba(0, 212, 255, 0.1), rgba(0, 212, 255, 0.05));
+  color: var(--text-secondary);
+}
+
+select option:checked {
+  background: linear-gradient(90deg, rgba(0, 212, 255, 0.2), rgba(0, 212, 255, 0.1));
+  color: var(--accent-cyan);
+  font-weight: 600;
+  position: relative;
+}
+
+select option:checked::before {
+  content: '▸ ';
+  color: var(--accent-cyan);
+  margin-right: 8px;
+}
+
+/* Additional styling for select dropdown container */
+select::-ms-expand {
+  display: none;
+}
+
+/* Enhanced focus state with scan line effect */
+select:focus {
+  animation: select-scan 1.5s ease-in-out infinite;
+}
+
+@keyframes select-scan {
+  0%, 100% {
+    box-shadow: 
+      0 0 10px rgba(0, 212, 255, 0.3),
+      inset 0 0 5px rgba(0, 212, 255, 0.1);
+  }
+  50% {
+    box-shadow: 
+      0 0 15px rgba(0, 212, 255, 0.5),
+      inset 0 0 10px rgba(0, 212, 255, 0.2);
+  }
+}
+
 input::placeholder,
 textarea::placeholder {
   color: var(--text-muted);
