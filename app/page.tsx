@@ -35,6 +35,8 @@ const PATH_TO_TAB: Record<string, TabKey> = {
   '/archive': 'view',
 };
 
+const SCRIPT_TRANSFER_KEY = 'scenyx_script_transfer';
+
 function resolveTabFromPath(pathname?: string | null): TabKey {
   if (!pathname) return 'generate';
   const trimmed = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
@@ -77,6 +79,31 @@ export default function Home() {
     lipsync: useRef<HTMLButtonElement | null>(null),
     view: useRef<HTMLButtonElement | null>(null),
   } as const;
+
+  useEffect(() => {
+    if (activeTab !== 'generate') return;
+    if (typeof window === 'undefined') return;
+
+    const transferRaw = sessionStorage.getItem(SCRIPT_TRANSFER_KEY);
+    if (!transferRaw) return;
+
+    try {
+      const transfer = JSON.parse(transferRaw) as { prompt?: string; orientation?: 'vertical' | 'horizontal'; duration?: '4' | '8' | '12' };
+      if (transfer.prompt) {
+        setPrompt(transfer.prompt);
+      }
+      if (transfer.orientation) {
+        setVideoOrientation(transfer.orientation);
+      }
+      if (transfer.duration) {
+        setVideoDuration(transfer.duration);
+      }
+    } catch (error) {
+      console.warn('Failed to restore script transfer payload', error);
+    } finally {
+      sessionStorage.removeItem(SCRIPT_TRANSFER_KEY);
+    }
+  }, [activeTab]);
 
   const switchTab = useCallback((tab: TabKey) => {
     const targetPath = TAB_TO_PATH[tab];
@@ -977,11 +1004,15 @@ export default function Home() {
   };
 
   const generateVideoFromScript = () => {
+    if (typeof window !== 'undefined') {
+      const payload = {
+        prompt: generatedScript,
+        orientation,
+        duration: scriptDuration,
+      };
+      sessionStorage.setItem(SCRIPT_TRANSFER_KEY, JSON.stringify(payload));
+    }
     switchTab('generate');
-    setPrompt(generatedScript);
-    // Transfer orientation and duration settings from script to video generation
-    setVideoOrientation(orientation);
-    setVideoDuration(scriptDuration);
   };
 
   // Handle image file selection
@@ -1476,7 +1507,7 @@ export default function Home() {
               ref={tabRefs.script}
               className={`tab-button ${activeTab === 'script' ? 'active' : ''}`}
             >
-              [ SCRIPT GEN ]
+              [ AD SCRIPT GEN ]
             </button>
             <button
               onClick={() => switchTab('generate')}
@@ -1510,7 +1541,7 @@ export default function Home() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
           >
-            <TerminalPanel title="SCRIPT GENERATION MODULE" status="active">
+            <TerminalPanel title="SCRIPT GENERATION MODULE FOR ADS" status="active">
               <div className="space-y-6">
                 <DataGrid columns={2} gap="md">
                   <TerminalInput
