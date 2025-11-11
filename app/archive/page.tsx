@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { createPortal } from 'react-dom';
+import { useRouter } from 'next/navigation';
 import { useArchive } from '@/lib/hooks/useArchive';
 import { formatCredits } from '@/lib/client/pricing';
 import TerminalPanel from '@/components/TerminalPanel';
@@ -12,6 +13,7 @@ import TerminalInput from '@/components/TerminalInput';
 import CostEstimate from '@/components/CostEstimate';
 
 export default function ArchivePage() {
+  const router = useRouter();
   const archive = useArchive();
 
   return (
@@ -96,26 +98,14 @@ export default function ArchivePage() {
 
                         <div className="mt-3 flex gap-2 flex-wrap">
                           <button
-                            onClick={async () => {
+                            onClick={() => {
                               if (isExpired) return;
-                              archive.setPreviews((p) => ({ ...p, [item.video_id]: { ...p[item.video_id], loading: true, error: undefined } }));
-                              try {
-                                const url = item.source === 'replicate'
-                                  ? `/api/check-lipsync?prediction_id=${encodeURIComponent(item.video_id)}`
-                                  : `/api/check-video?video_id=${encodeURIComponent(item.video_id)}`;
-                                const res = await fetch(url);
-                                const data = await res.json();
-                                if (!res.ok) throw new Error(data.error || 'Failed to fetch preview');
-                                const finalUrl = data.video_data || data.video_url || data.output || undefined;
-                                archive.setPreviews((p) => ({ ...p, [item.video_id]: { url: finalUrl, loading: false } }));
-                              } catch (e: any) {
-                                archive.setPreviews((p) => ({ ...p, [item.video_id]: { loading: false, error: e.message || 'Failed to load' } }));
-                              }
+                              router.push(`/archive/${item.video_id}`);
                             }}
-                            disabled={((item.status !== 'completed' && !preview.url) || (isExpired && !preview.url) || preview.loading)}
+                            disabled={item.status !== 'completed' || isExpired}
                             className="flex-1 text-center border border-[var(--border-dim)] text-[var(--text-muted)] px-2.5 sm:px-3 py-2 text-[10px] uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] disabled:opacity-40"
                           >
-                            {preview.loading ? 'LOADING…' : '[ VIEW ]'}
+                            [ VIEW ]
                           </button>
                           <button
                             onClick={async () => {
