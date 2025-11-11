@@ -407,17 +407,17 @@ export default function CreditsPage() {
             
             {publicKey && usdcBalance !== null && usdcBalance === 0 && (
               <div className="border border-[var(--accent-red)] bg-[var(--accent-red)] bg-opacity-10 p-3 space-y-2">
-                <div className="text-xs text-[var(--accent-red)] font-semibold">
+                <div className="text-xs text-white font-semibold">
                   ⚠ No USDC Balance
                 </div>
-                <div className="text-xs text-[var(--text-muted)]">
+                <div className="text-xs text-white">
                   You need USDC to purchase credits. Swap SOL or other tokens for USDC:
                 </div>
                 <a
                   href={JUPITER_SWAP_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-block text-xs text-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] underline"
+                  className="inline-block text-sm pt-[10px] text-white hover:text-[var(--accent-cyan)] underline"
                 >
                   → Swap tokens on Jupiter
                 </a>
