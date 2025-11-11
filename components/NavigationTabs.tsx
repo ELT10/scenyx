@@ -8,6 +8,8 @@ export default function NavigationTabs() {
   const router = useRouter();
   const pathname = usePathname();
   const activeTab = useMemo(() => resolveTabFromPath(pathname), [pathname]);
+  
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const tabScrollRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = {
     script: useRef<HTMLButtonElement | null>(null),
@@ -41,6 +43,15 @@ export default function NavigationTabs() {
       behavior: 'smooth',
     });
   }, [activeTab]);
+
+  // Hide navigation tabs on certain pages (AFTER all hooks are called)
+  const shouldHideNavigation = useMemo(() => {
+    return pathname?.startsWith('/credits') || pathname?.startsWith('/archive/');
+  }, [pathname]);
+  
+  if (shouldHideNavigation) {
+    return null;
+  }
 
   return (
     <>

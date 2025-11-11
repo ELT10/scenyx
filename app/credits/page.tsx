@@ -348,6 +348,24 @@ export default function CreditsPage() {
 
   return (
     <div className="container mx-auto max-w-5xl py-12 px-4 space-y-8">
+      {/* Back Button */}
+      <div className="mb-6">
+        <button
+          onClick={() => router.push('/video-gen')}
+          className="group flex items-center gap-2 text-[var(--text-muted)] hover:text-[var(--accent-cyan)] transition-colors text-sm uppercase tracking-wider"
+        >
+          <svg
+            className="w-4 h-4 transition-transform group-hover:-translate-x-1"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          <span>[ BACK TO STUDIO ]</span>
+        </button>
+      </div>
+
       <div className="text-center">
         <h1 className="text-3xl uppercase tracking-[0.3em] text-[var(--text-primary)] mb-2">Credits & Billing</h1>
         <p className="text-sm text-[var(--text-muted)]">Manage balance, add credits, self-verify payments, and review history.</p>
