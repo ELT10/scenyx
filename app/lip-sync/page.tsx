@@ -96,7 +96,7 @@ export default function LipSyncPage() {
                     disabled={lipSync.loadingLipSync || lipSync.loadingTTS || lipSync.generatingAvatar}
                     className={`p-4 border text-center transition-all ${
                       lipSync.imageSource === 'upload'
-                        ? 'border-[var(--accent-cyan)] bg-[var(--accent-cyan)] bg-opacity-10 text-[var(--accent-cyan)]'
+                        ? 'border-[var(--accent-cyan)] bg-[var(--accent-cyan)] bg-opacity-10 text-black'
                         : 'border-[var(--border-dim)] text-[var(--text-muted)] hover:border-[var(--text-secondary)]'
                     }`}
                   >
@@ -111,7 +111,7 @@ export default function LipSyncPage() {
                     disabled={lipSync.loadingLipSync || lipSync.loadingTTS || lipSync.generatingAvatar}
                     className={`p-4 border text-center transition-all ${
                       lipSync.imageSource === 'ai'
-                        ? 'border-[var(--accent-cyan)] bg-[var(--accent-cyan)] bg-opacity-10 text-[var(--accent-cyan)]'
+                        ? 'border-[var(--accent-cyan)] bg-[var(--accent-cyan)] bg-opacity-10 text-black'
                         : 'border-[var(--border-dim)] text-[var(--text-muted)] hover:border-[var(--text-secondary)]'
                     }`}
                   >
@@ -254,8 +254,8 @@ export default function LipSyncPage() {
                     disabled={lipSync.loadingLipSync || lipSync.loadingTTS}
                     className={`p-4 border text-center transition-all ${
                       lipSync.audioSource === 'tts'
-                        ? 'border-[var(--accent-cyan)] bg-[var(--accent-cyan)] bg-opacity-10 text-[var(--accent-cyan)]'
-                        : 'border-[var(--border-dim)] text-[var(--text-muted)] hover:border-[var(--text-secondary)]'
+                        ? 'border-[var(--accent-cyan)] bg-[var(--accent-cyan)] bg-opacity-10 text-black'
+                        : 'border-[#676767] text-[var(--text-muted-secondary)] hover:border-[var(--text-secondary)]'
                     }`}
                   >
                     <div className="text-2xl mb-2">🔊</div>
@@ -266,8 +266,8 @@ export default function LipSyncPage() {
                     disabled={lipSync.loadingLipSync || lipSync.loadingTTS}
                     className={`p-4 border text-center transition-all ${
                       lipSync.audioSource === 'upload'
-                        ? 'border-[var(--accent-cyan)] bg-[var(--accent-cyan)] bg-opacity-10 text-[var(--accent-cyan)]'
-                        : 'border-[var(--border-dim)] text-[var(--text-muted)] hover:border-[var(--text-secondary)]'
+                        ? 'border-[var(--accent-cyan)] bg-[var(--accent-cyan)] bg-opacity-10 text-black'
+                        : 'border-[#676767] text-[var(--text-muted-secondary)] hover:border-[var(--text-secondary)]'
                     }`}
                   >
                     <div className="text-2xl mb-2">📤</div>
@@ -290,7 +290,7 @@ export default function LipSyncPage() {
                         <button
                           onClick={lipSync.generateVoiceoverScript}
                           disabled={lipSync.generatingVoiceoverScript || !lipSync.lipSyncScript.trim()}
-                          className="text-[10px] uppercase tracking-wider px-2 py-1 border border-[var(--border-dim)] text-[var(--text-muted)] hover:border-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] transition-colors"
+                          className="text-[10px] uppercase tracking-wider px-2 py-1 border border-[#626161] text-[var(--text-muted)] hover:border-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] transition-colors"
                         >
                           {lipSync.generatingVoiceoverScript ? 'GENERATING...' : 'ENHANCE SCRIPT'}
                         </button>
@@ -329,7 +329,7 @@ export default function LipSyncPage() {
 
                     {lipSync.generatedAudioUrl && (
                       <div className="border border-[var(--border-primary)] p-4 bg-black bg-opacity-60">
-                        <p className="text-xs text-[var(--text-muted)] uppercase mb-2">Generated Audio</p>
+                        <p className="text-xs text-[var(--text-muted-secondary)] uppercase mb-2">Generated Audio</p>
                         <audio
                           ref={lipSync.audioRef}
                           src={lipSync.generatedAudioUrl}
@@ -347,10 +347,10 @@ export default function LipSyncPage() {
                   <div>
                     {!lipSync.lipSyncAudioUrl ? (
                       <label className="block">
-                        <div className="border-2 border-dashed border-[var(--border-dim)] p-8 text-center cursor-pointer hover:border-[var(--accent-cyan)] transition-all">
+                        <div className="border-2 border-dashed border-[#585163] p-8 text-center cursor-pointer hover:border-[var(--accent-cyan)] transition-all">
                           <div className="text-4xl mb-2">🎵</div>
-                          <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Click to upload audio</p>
-                          <p className="text-[10px] text-[var(--text-muted)] mt-2">MP3, WAV, OGG (Max 10MB)</p>
+                          <p className="text-xs text-[var(--text-muted-secondary)] uppercase tracking-wider">Click to upload audio</p>
+                          <p className="text-[10px] text-[var(--text-muted-secondary)] mt-2">MP3, WAV, OGG (Max 10MB)</p>
                         </div>
                         <input
                           type="file"
@@ -363,7 +363,7 @@ export default function LipSyncPage() {
                     ) : (
                       <div>
                         <div className="border border-[var(--border-primary)] p-4 bg-black bg-opacity-60">
-                          <p className="text-xs text-[var(--text-muted)] uppercase mb-2">Uploaded Audio</p>
+                          <p className="text-xs text-[var(--text-muted-secondary)] uppercase mb-2">Uploaded Audio</p>
                           <audio
                             ref={lipSync.audioRef}
                             src={lipSync.lipSyncAudioUrl}
@@ -376,7 +376,7 @@ export default function LipSyncPage() {
                           onClick={() => {
                             lipSync.handleAudioFileChange({ target: { files: null } } as any);
                           }}
-                          className="mt-2 w-full border border-[var(--border-dim)] text-[var(--text-muted)] px-4 py-2 text-xs uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-all"
+                          className="mt-2 w-full border border-[var(--border-dim)] text-[var(--text-muted-secondary)] px-4 py-2 text-xs uppercase tracking-wider hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-all"
                         >
                           CLEAR AUDIO
                         </button>
@@ -470,7 +470,7 @@ export default function LipSyncPage() {
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-[var(--text-primary)]">{lipSync.lipSyncModelLabels[model] || model}</span>
+                        <span className={`text-sm  ${lipSync.lipSyncModel === model ? 'text-black' : 'text-[var(--text-primary)]'}`}>{lipSync.lipSyncModelLabels[model] || model}</span>
                         <span
                           className="text-[10px] px-2 py-1 rounded uppercase tracking-wide"
                           style={lipSync.statusStyles[(lipSync.modelStatuses[model] || 'unknown')]}
