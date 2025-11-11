@@ -264,7 +264,7 @@ export default function ArchivePage() {
           <div className="text-xs space-y-2 text-[var(--text-muted)]">
             <div className="flex items-start gap-2">
               <span className="text-[var(--text-primary)]">{'>'}</span>
-              <span>Archive shows all videos generated in the last 20 hours</span>
+              <span>Archive shows all videos generated that have not expired</span>
             </div>
             <div className="flex items-start gap-2">
               <span className="text-[var(--text-primary)]">{'>'}</span>
