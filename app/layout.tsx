@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Link from "next/link";
 import WalletProvider from '@/components/WalletProvider';
-
+import NavigationTabs from '@/components/NavigationTabs';
 import HeaderRight from '@/components/HeaderRight';
 
 export const metadata: Metadata = {
@@ -45,7 +45,10 @@ export default function RootLayout({
 
           {/* Main content with top padding for status bar */}
           <div className="pt-20 sm:pt-16 lg:pt-12">
-            {children}
+            <div className="relative z-10 container mx-auto px-3 sm:px-4 py-8 max-w-5xl">
+              <NavigationTabs />
+              {children}
+            </div>
           </div>
 
           {/* System Footer */}
