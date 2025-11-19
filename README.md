@@ -6,6 +6,8 @@ A sleek, modern web interface for generating videos using OpenAI's Sora 2 API. B
 
 - 🎨 Modern, terminal-inspired UI with grey/white aesthetic
 - ⚡ Fast video generation using OpenAI's Sora 2 API
+- 💸 Crypto payments via Solana (USDC)
+- ☁️ Cloud sync and history with Supabase
 - 📝 AI-powered script generator for video ads
 - 🎯 Three quality levels for text generation (GPT-5 Nano, Mini, and Full)
 - 🎬 Generate creative thread options or use custom threads
@@ -17,7 +19,6 @@ A sleek, modern web interface for generating videos using OpenAI's Sora 2 API. B
 - 🔍 Check video status by video ID
 - 🔄 Auto-polling for in-progress videos
 - 📊 Real-time progress tracking
-- 💾 LocalStorage integration - automatically saves all video IDs
 - 📑 Tabbed interface with "Script Generator", "Generate Video", and "View Videos"
 - 📼 View all your previously generated videos in one place
 
@@ -26,6 +27,9 @@ A sleek, modern web interface for generating videos using OpenAI's Sora 2 API. B
 - Node.js 18.x or higher
 - npm or yarn package manager
 - OpenAI API key with Sora 2 access
+- Replicate API token (for Lip Sync/Avatar)
+- Supabase project (for database)
+- Solana RPC URL (optional, defaults to mainnet-beta)
 
 ## Getting Started
 
@@ -53,6 +57,14 @@ Then edit `.env.local` and add your OpenAI API key:
 
 ```
 OPEN_API_KEY=your_openai_api_key_here
+NEXT_PUBLIC_SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+USDC_MINT=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+MERCHANT_WALLET_ADDRESS=your_merchant_wallet_address
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+REPLIT_KEY=r8_your_replicate_api_token
 ```
 
 ⚠️ **Important:** Make sure to add your actual OpenAI API key. You can get one from [OpenAI's platform](https://platform.openai.com/api-keys).
@@ -322,6 +334,8 @@ npm start
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS
 - **API Client**: OpenAI Node.js SDK
+- **Database**: Supabase
+- **Blockchain**: Solana (Web3.js)
 - **Runtime**: Node.js
 
 ## Environment Variables
@@ -329,6 +343,14 @@ npm start
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `OPEN_API_KEY` | Your OpenAI API key | Yes |
+| `NEXT_PUBLIC_SOLANA_RPC_URL` | Solana RPC URL for client | Yes |
+| `SOLANA_RPC_URL` | Solana RPC URL for server | Yes |
+| `USDC_MINT` | USDC Token Mint Address | Yes |
+| `MERCHANT_WALLET_ADDRESS` | Wallet to receive payments | Yes |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL | Yes |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Anon Key | Yes |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Service Role Key | Yes |
+| `REPLIT_KEY` | Replicate API Token | Yes (for Lip Sync) |
 
 ## Troubleshooting
 
@@ -360,8 +382,8 @@ This will rebuild the Tailwind CSS.
 - **Rate Limits**: Be aware of OpenAI's rate limits and implement appropriate error handling for your use case.
 - **Video Generation Time**: Video generation typically takes 1-2 minutes. The application uses `createAndPoll()` which automatically handles the polling for you.
 - **Video Format**: Generated videos are returned as MP4 files and are displayed inline in the browser using base64 encoding.
-- **LocalStorage**: Video IDs are stored in your browser's localStorage under the key `sora_video_ids`. This data persists across sessions but is browser-specific.
-- **Privacy**: All video IDs are stored locally in your browser only - no external database is used.
+- **LocalStorage**: Video IDs are stored in your browser's localStorage under the key `sora_video_ids` for quick access.
+- **Database**: Payment history and credits are stored securely in Supabase.
 
 ## License
 
