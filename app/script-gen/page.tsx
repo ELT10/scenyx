@@ -30,7 +30,7 @@ export default function ScriptGenPage() {
                   placeholder="Enter company or product name..."
                   value={script.companyName}
                   onChange={(e) => script.setCompanyName(e.target.value)}
-                  disabled={script.loadingThreads || script.loadingScript}
+                  disabled={script.loadingIdeas || script.loadingScript}
                 />
 
                 <TerminalInput
@@ -38,7 +38,7 @@ export default function ScriptGenPage() {
                   placeholder="Enter product or company type..."
                   value={script.companyType}
                   onChange={(e) => script.setCompanyType(e.target.value)}
-                  disabled={script.loadingThreads || script.loadingScript}
+                  disabled={script.loadingIdeas || script.loadingScript}
                 />
               </DataGrid>
 
@@ -49,7 +49,7 @@ export default function ScriptGenPage() {
                 rows={3}
                 value={script.productDescription}
                 onChange={(e) => script.setProductDescription(e.target.value)}
-                disabled={script.loadingThreads || script.loadingScript}
+                disabled={script.loadingIdeas || script.loadingScript}
               />
 
               <div className="space-y-4">
@@ -61,7 +61,7 @@ export default function ScriptGenPage() {
                     <select
                       value={script.scriptQuality}
                       onChange={(e) => script.setScriptQuality(e.target.value as 'nano' | 'mini' | 'high')}
-                      disabled={script.loadingThreads || script.loadingScript}
+                      disabled={script.loadingIdeas || script.loadingScript}
                       className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
                     >
                       <option value="nano">[ FAST ] GPT-5 NANO</option>
@@ -77,7 +77,7 @@ export default function ScriptGenPage() {
                     <select
                       value={script.scriptDuration}
                       onChange={(e) => script.setScriptDuration(e.target.value as '4' | '8' | '12')}
-                      disabled={script.loadingThreads || script.loadingScript}
+                      disabled={script.loadingIdeas || script.loadingScript}
                       className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
                     >
                       <option value="4">[ SHORT ] 4 SECONDS</option>
@@ -94,7 +94,7 @@ export default function ScriptGenPage() {
                   <select
                     value={script.orientation}
                     onChange={(e) => script.setOrientation(e.target.value as 'vertical' | 'horizontal')}
-                    disabled={script.loadingThreads || script.loadingScript}
+                    disabled={script.loadingIdeas || script.loadingScript}
                     className="w-full bg-black bg-opacity-60 border border-[var(--border-dim)] text-[var(--text-primary)] px-4 py-3 text-sm font-mono focus:border-[var(--border-primary)] focus:outline-none transition-all"
                   >
                     <option value="horizontal">[ HORIZONTAL ] 1280x720</option>
@@ -104,19 +104,77 @@ export default function ScriptGenPage() {
               </div>
 
               <TerminalInput
-                label="CUSTOM THREAD (OPTIONAL)"
-                placeholder="Enter custom narrative thread..."
+                label="CUSTOM IDEA (OPTIONAL)"
+                placeholder="Enter your own creative idea or concept..."
                 multiline
                 rows={2}
-                value={script.customThread}
-                onChange={(e) => script.setCustomThread(e.target.value)}
-                disabled={script.loadingThreads || script.loadingScript}
+                value={script.customIdea}
+                onChange={(e) => script.setCustomIdea(e.target.value)}
+                disabled={script.loadingIdeas || script.loadingScript}
               />
 
-              {!script.customThread.trim() ? (
+              {/* Advanced Options Collapsible Section */}
+              <div className="border border-[var(--border-dim)] bg-black bg-opacity-30">
+                <button
+                  type="button"
+                  onClick={() => script.setShowAdvanced(!script.showAdvanced)}
+                  className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-[var(--text-primary)] hover:bg-opacity-5 transition-colors"
+                  disabled={script.loadingIdeas || script.loadingScript}
+                >
+                  <span className="text-xs uppercase tracking-widest text-[var(--text-muted)] font-mono">
+                    {'>'} ADVANCED OPTIONS
+                  </span>
+                  <span className="text-[var(--text-muted)] text-sm">
+                    {script.showAdvanced ? '[ − ]' : '[ + ]'}
+                  </span>
+                </button>
+                
+                {script.showAdvanced && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="px-4 pb-4 space-y-4 border-t border-[var(--border-dim)]"
+                  >
+                    <div className="pt-4">
+                      <p className="text-xs text-[var(--text-muted)] mb-4">
+                        These optional fields help generate more targeted scripts. Leave empty to let AI determine the best approach.
+                      </p>
+                      
+                      <TerminalInput
+                        label="TARGET AUDIENCE"
+                        placeholder="e.g., Young professionals aged 25-35, busy parents, fitness enthusiasts..."
+                        value={script.targetAudience}
+                        onChange={(e) => script.setTargetAudience(e.target.value)}
+                        disabled={script.loadingIdeas || script.loadingScript}
+                      />
+                    </div>
+
+                    <TerminalInput
+                      label="PROBLEM / PAIN POINT"
+                      placeholder="e.g., Struggling with hair fall, lack of time for self-care, expensive alternatives..."
+                      multiline
+                      rows={2}
+                      value={script.audienceProblem}
+                      onChange={(e) => script.setAudienceProblem(e.target.value)}
+                      disabled={script.loadingIdeas || script.loadingScript}
+                    />
+
+                    <TerminalInput
+                      label="CALL TO ACTION (CTA)"
+                      placeholder="e.g., Shop Now, Try Free for 7 Days, Visit our website, Download the app..."
+                      value={script.callToAction}
+                      onChange={(e) => script.setCallToAction(e.target.value)}
+                      disabled={script.loadingIdeas || script.loadingScript}
+                    />
+                  </motion.div>
+                )}
+              </div>
+
+              {!script.customIdea.trim() ? (
                 <CostEstimate 
-                  credits={script.threadsCost} 
-                  operation="Thread Generation" 
+                  credits={script.ideasCost} 
+                  operation="Idea Generation" 
                 />
               ) : (
                 <CostEstimate 
@@ -126,18 +184,18 @@ export default function ScriptGenPage() {
               )}
 
               <div className="flex flex-col sm:flex-row gap-3">
-                {!script.customThread.trim() ? (
+                {!script.customIdea.trim() ? (
                   <GlowButton
-                    onClick={script.generateThreads}
-                    disabled={script.loadingThreads || !script.companyName.trim() || !script.companyType.trim()}
-                    loading={script.loadingThreads}
+                    onClick={script.generateIdeas}
+                    disabled={script.loadingIdeas || !script.companyName.trim() || !script.companyType.trim()}
+                    loading={script.loadingIdeas}
                     className="flex-1"
                   >
-                    {script.loadingThreads ? 'GENERATING...' : '[ GENERATE THREADS ]'}
+                    {script.loadingIdeas ? 'GENERATING...' : '[ GENERATE IDEAS ]'}
                   </GlowButton>
                 ) : (
                   <GlowButton
-                    onClick={script.handleCustomThreadSubmit}
+                    onClick={script.handleCustomIdeaSubmit}
                     disabled={script.loadingScript || !script.companyName.trim() || !script.companyType.trim()}
                     loading={script.loadingScript}
                     className="flex-1"
@@ -159,31 +217,31 @@ export default function ScriptGenPage() {
                 </div>
               )}
 
-              {script.threads.length > 0 && !script.customThread && (
+              {script.ideas.length > 0 && !script.customIdea && (
                 <div>
                   <h3 className="text-sm uppercase tracking-widest text-[var(--text-primary)] mb-4 font-mono">
-                    {'>'} SELECT THREAD CONCEPT
+                    {'>'} SELECT AN IDEA
                   </h3>
                   <DataGrid columns={2} gap="md">
-                    {script.threads.map((thread) => (
+                    {script.ideas.map((idea) => (
                       <button
-                        key={thread.id}
-                        onClick={() => script.handleThreadSelect(thread)}
+                        key={idea.id}
+                        onClick={() => script.handleIdeaSelect(idea)}
                         disabled={script.loadingScript}
                         className={`
                           p-4 border text-left transition-all
-                          ${script.selectedThread?.id === thread.id
+                          ${script.selectedIdea?.id === idea.id
                             ? 'border-[var(--border-primary)] bg-[var(--text-primary)] bg-opacity-5 '
                             : 'border-[var(--border-dim)] hover:border-[var(--text-secondary)] '
                           }
                           disabled:opacity-30 disabled:cursor-not-allowed
                         `}
                       >
-                        <h4 className={`font-bold text-sm mb-2 uppercase tracking-wide ${script.selectedThread?.id === thread.id ? 'text-[#000000]' : 'text-[var(--text-primary)]'}`}>
-                          {thread.title}
+                        <h4 className={`font-bold text-sm mb-2 uppercase tracking-wide ${script.selectedIdea?.id === idea.id ? 'text-[#000000]' : 'text-[var(--text-primary)]'}`}>
+                          {idea.title}
                         </h4>
                         <p className="text-[var(--text-muted)] text-xs leading-relaxed">
-                          {thread.description}
+                          {idea.description}
                         </p>
                       </button>
                     ))}
@@ -244,11 +302,15 @@ export default function ScriptGenPage() {
             </div>
             <div className="flex items-start gap-2">
               <span className="text-[var(--text-primary)]">{'>'}</span>
-              <span>Leave Custom Thread empty and click [ GENERATE THREADS ] for ideas</span>
+              <span>Expand Advanced Options to specify Target Audience, Pain Points, and CTA for better results</span>
             </div>
             <div className="flex items-start gap-2">
               <span className="text-[var(--text-primary)]">{'>'}</span>
-              <span>Select a thread to auto-generate a script, or enter a custom thread and click [ GENERATE SCRIPT ]</span>
+              <span>Leave Custom Idea empty and click [ GENERATE IDEAS ] for AI suggestions</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-[var(--text-primary)]">{'>'}</span>
+              <span>Select an idea to auto-generate a script, or enter a custom idea and click [ GENERATE SCRIPT ]</span>
             </div>
             <div className="flex items-start gap-2">
               <span className="text-[var(--text-primary)]">{'>'}</span>

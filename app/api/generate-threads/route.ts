@@ -8,14 +8,27 @@ const QUALITY_MODEL_MAP: Record<string, string> = {
   'high': 'gpt-5',
 };
 
-export const POST = withCreditGuard<{ quality?: string; companyName?: string; companyType?: string; product?: string; orientation?: string; duration?: string }>({
+interface ThreadsRequestBody {
+  quality?: string;
+  companyName?: string;
+  companyType?: string;
+  product?: string;
+  orientation?: string;
+  duration?: string;
+  // Advanced options
+  targetAudience?: string;
+  audienceProblem?: string;
+  callToAction?: string;
+}
+
+export const POST = withCreditGuard<ThreadsRequestBody>({
   estimateUsdMicros: async ({ quality = 'mini' }) => {
     const model = QUALITY_MODEL_MAP[quality] || QUALITY_MODEL_MAP['mini'];
     // Conservative upper-bound estimate with buffer for reasoning tokens
     // GPT-5 can use significant reasoning tokens, so estimate high
     return estimateChatUsdMicros(model, 1000, 3000);  // Increased buffer
   },
-  runWithUsageUsdMicros: async ({ companyName, companyType, product, quality = 'mini', orientation = 'horizontal', duration = '12' }, _req, _context) => {
+  runWithUsageUsdMicros: async ({ companyName, companyType, product, quality = 'mini', orientation = 'horizontal', duration = '12', targetAudience, audienceProblem, callToAction }, _req, _context) => {
 
     if (!companyName || !companyType) {
       const res = NextResponse.json(
@@ -34,13 +47,20 @@ export const POST = withCreditGuard<{ quality?: string; companyName?: string; co
       ? 'mobile-first portrait video suitable for social media platforms like Instagram Stories, TikTok, and YouTube Shorts'
       : 'traditional landscape video suitable for YouTube, TV, and desktop viewing';
 
+    // Build advanced context if provided
+    const advancedContext = [
+      targetAudience ? `Target Audience: ${targetAudience}` : '',
+      audienceProblem ? `Problem/Pain Point the audience faces: ${audienceProblem}` : '',
+      callToAction ? `Desired Call-to-Action: ${callToAction}` : '',
+    ].filter(Boolean).join('\n');
+
     console.log('=== GENERATE THREADS REQUEST ===');
-    console.log('Input parameters:', { companyName, companyType, product, quality, model, orientation, duration });
+    console.log('Input parameters:', { companyName, companyType, product, quality, model, orientation, duration, targetAudience, audienceProblem, callToAction });
 
     const prompt = `You are a creative advertising strategist. Generate 4 unique and compelling creative threads/concepts for a ${duration}-second ${orientation} video advertisement.
 
 Company: ${companyName}
-Type: ${companyType}${product ? `\nProduct Details: ${product}` : ''}
+Type: ${companyType}${product ? `\nProduct Details: ${product}` : ''}${advancedContext ? `\n${advancedContext}` : ''}
 Video Format: ${videoDimensions} - ${formatContext}
 Duration: ${duration} seconds
 
@@ -48,8 +68,7 @@ Each thread should:
 - Be concise (1-2 sentences)
 - Focus on a unique emotional or narrative angle
 - Be suitable for a ${duration}-second ${orientation} video ad (${videoDimensions})
-- Be optimized for ${formatContext}
-- Appeal to the target audience
+- Be optimized for ${formatContext}${targetAudience ? `\n- Specifically appeal to the target audience: ${targetAudience}` : '\n- Appeal to the target audience'}${audienceProblem ? `\n- Address the pain point: ${audienceProblem}` : ''}${callToAction ? `\n- Lead naturally toward the call-to-action: ${callToAction}` : ''}
 - Consider the ${duration}-second time constraint when suggesting narrative concepts
 
 Format your response as a JSON object with a "threads" array containing 4 objects.

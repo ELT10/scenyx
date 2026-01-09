@@ -169,7 +169,7 @@ export default function LipSyncPage() {
                           disabled={lipSync.generatingAvatar}
                           className={`p-3 border text-center transition-all ${
                             lipSync.avatarType === 'face'
-                              ? 'border-[var(--accent-cyan)] bg-[var(--accent-cyan)] bg-opacity-10 text-[var(--accent-cyan)]'
+                              ? 'border-[var(--accent-cyan)] bg-[var(--accent-cyan)] bg-opacity-10 text-[black]'
                               : 'border-[var(--border-dim)] text-[var(--text-muted)]'
                           }`}
                         >
@@ -180,7 +180,7 @@ export default function LipSyncPage() {
                           disabled={lipSync.generatingAvatar}
                           className={`p-3 border text-center transition-all ${
                             lipSync.avatarType === 'full-body'
-                              ? 'border-[var(--accent-cyan)] bg-[var(--accent-cyan)] bg-opacity-10 text-[var(--accent-cyan)]'
+                              ? 'border-[var(--accent-cyan)] bg-[var(--accent-cyan)] bg-opacity-10 text-[black]'
                               : 'border-[var(--border-dim)] text-[var(--text-muted)]'
                           }`}
                         >

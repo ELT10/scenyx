@@ -3,6 +3,7 @@ export const revalidate = 0;
 import { NextRequest, NextResponse } from 'next/server';
 import { finalizeVideoGeneration, getVideoGeneration, updateVideoGenerationStatus, updateVideoUrl } from '@/lib/videoGenerations';
 import { releaseHold } from '@/lib/credits';
+import { checkRateLimit, getRateLimitIdentifier, RATE_LIMITS } from '@/lib/rateLimit';
 
 const OPENAI_API_BASE = 'https://api.openai.com/v1';
 
@@ -22,6 +23,25 @@ interface VideoResponse {
 }
 
 export async function GET(request: NextRequest) {
+  // Apply rate limiting
+  const identifier = getRateLimitIdentifier(request);
+  const rateLimitResult = checkRateLimit(identifier, RATE_LIMITS.status.maxRequests, RATE_LIMITS.status.windowMs);
+  
+  if (!rateLimitResult.allowed) {
+    const retryAfter = Math.ceil((rateLimitResult.resetAt - Date.now()) / 1000);
+    return NextResponse.json(
+      { error: 'Too many requests. Please try again later.', retryAfter },
+      { 
+        status: 429,
+        headers: {
+          'Retry-After': String(retryAfter),
+          'X-RateLimit-Limit': String(RATE_LIMITS.status.maxRequests),
+          'X-RateLimit-Remaining': '0',
+        },
+      }
+    );
+  }
+
   try {
     const searchParams = request.nextUrl.searchParams;
     const videoId = searchParams.get('video_id');

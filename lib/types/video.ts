@@ -13,7 +13,7 @@ export interface VideoStatus {
   };
 }
 
-export interface Thread {
+export interface Idea {
   id: number;
   title: string;
   description: string;

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createNonce } from '@/lib/siws';
+import { withRateLimit, RATE_LIMITS } from '@/lib/rateLimit';
 
-export async function POST(req: NextRequest) {
+async function handler(req: NextRequest) {
   try {
     const { walletAddress } = await req.json();
     if (!walletAddress) return NextResponse.json({ error: 'walletAddress required' }, { status: 400 });
@@ -11,5 +12,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e.message || 'failed' }, { status: 500 });
   }
 }
+
+export const POST = withRateLimit(handler, RATE_LIMITS.auth);
 
 

@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
+import { withRateLimit, RATE_LIMITS } from '@/lib/rateLimit';
 
-export async function GET() {
+async function handler(_req: NextRequest) {
   try {
     const session = await getSession();
     if (!session) {
@@ -15,4 +16,6 @@ export async function GET() {
     return NextResponse.json({ error: e.message || 'failed' }, { status: 500 });
   }
 }
+
+export const GET = withRateLimit(handler, RATE_LIMITS.status);
 

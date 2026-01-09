@@ -6,7 +6,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { estimateChatCredits } from '@/lib/client/pricing';
 import { notifyCreditsUpdated } from '@/lib/client/events';
 import { SCRIPT_TRANSFER_KEY } from '@/lib/constants/navigation';
-import type { Thread } from '@/lib/types/video';
+import type { Idea } from '@/lib/types/video';
 
 export function useScriptGeneration() {
   const router = useRouter();
@@ -16,19 +16,25 @@ export function useScriptGeneration() {
   const [companyName, setCompanyName] = useState('');
   const [companyType, setCompanyType] = useState('');
   const [productDescription, setProductDescription] = useState('');
-  const [customThread, setCustomThread] = useState('');
+  const [customIdea, setCustomIdea] = useState('');
   const [scriptQuality, setScriptQuality] = useState<'nano' | 'mini' | 'high'>('mini');
   const [orientation, setOrientation] = useState<'vertical' | 'horizontal'>('horizontal');
   const [scriptDuration, setScriptDuration] = useState<'4' | '8' | '12'>('12');
-  const [threads, setThreads] = useState<Thread[]>([]);
-  const [selectedThread, setSelectedThread] = useState<Thread | null>(null);
+  const [ideas, setIdeas] = useState<Idea[]>([]);
+  const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null);
   const [generatedScript, setGeneratedScript] = useState('');
-  const [loadingThreads, setLoadingThreads] = useState(false);
+  const [loadingIdeas, setLoadingIdeas] = useState(false);
   const [loadingScript, setLoadingScript] = useState(false);
   const [scriptError, setScriptError] = useState<string | null>(null);
 
+  // Advanced options state
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [targetAudience, setTargetAudience] = useState('');
+  const [audienceProblem, setAudienceProblem] = useState('');
+  const [callToAction, setCallToAction] = useState('');
+
   // Cost calculations
-  const threadsCost = useMemo(() => {
+  const ideasCost = useMemo(() => {
     return estimateChatCredits(scriptQuality, 1000, 1500);
   }, [scriptQuality]);
 
@@ -36,9 +42,9 @@ export function useScriptGeneration() {
     return estimateChatCredits(scriptQuality, 1500, 2000);
   }, [scriptQuality]);
 
-  const generateThreads = useCallback(async () => {
+  const generateIdeas = useCallback(async () => {
     if (!publicKey) {
-      setScriptError('WALLET NOT CONNECTED: Please connect your wallet to generate threads');
+      setScriptError('WALLET NOT CONNECTED: Please connect your wallet to generate ideas');
       return;
     }
 
@@ -47,10 +53,10 @@ export function useScriptGeneration() {
       return;
     }
 
-    setLoadingThreads(true);
+    setLoadingIdeas(true);
     setScriptError(null);
-    setThreads([]);
-    setSelectedThread(null);
+    setIdeas([]);
+    setSelectedIdea(null);
 
     try {
       const response = await fetch('/api/generate-threads', {
@@ -65,32 +71,36 @@ export function useScriptGeneration() {
           quality: scriptQuality,
           orientation,
           duration: scriptDuration,
+          // Advanced options
+          targetAudience: targetAudience.trim() || undefined,
+          audienceProblem: audienceProblem.trim() || undefined,
+          callToAction: callToAction.trim() || undefined,
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate threads');
+        throw new Error(data.error || 'Failed to generate ideas');
       }
 
-      setThreads(data.threads);
+      setIdeas(data.threads);
       notifyCreditsUpdated();
     } catch (err: any) {
-      setScriptError(err.message || 'An error occurred while generating threads');
+      setScriptError(err.message || 'An error occurred while generating ideas');
       notifyCreditsUpdated();
     } finally {
-      setLoadingThreads(false);
+      setLoadingIdeas(false);
     }
-  }, [publicKey, companyName, companyType, productDescription, scriptQuality, orientation, scriptDuration]);
+  }, [publicKey, companyName, companyType, productDescription, scriptQuality, orientation, scriptDuration, targetAudience, audienceProblem, callToAction]);
 
-  const generateScript = useCallback(async (thread: Thread | string) => {
+  const generateScript = useCallback(async (idea: Idea | string) => {
     if (!publicKey) {
       setScriptError('WALLET NOT CONNECTED: Please connect your wallet to generate scripts');
       return;
     }
 
-    const threadText = typeof thread === 'string' ? thread : thread.description;
+    const ideaText = typeof idea === 'string' ? idea : idea.description;
 
     setLoadingScript(true);
     setScriptError(null);
@@ -106,10 +116,14 @@ export function useScriptGeneration() {
           companyName,
           companyType,
           product: productDescription,
-          thread: threadText,
+          thread: ideaText,
           quality: scriptQuality,
           orientation,
           duration: scriptDuration,
+          // Advanced options
+          targetAudience: targetAudience.trim() || undefined,
+          audienceProblem: audienceProblem.trim() || undefined,
+          callToAction: callToAction.trim() || undefined,
         }),
       });
 
@@ -127,20 +141,20 @@ export function useScriptGeneration() {
     } finally {
       setLoadingScript(false);
     }
-  }, [publicKey, companyName, companyType, productDescription, scriptQuality, orientation, scriptDuration]);
+  }, [publicKey, companyName, companyType, productDescription, scriptQuality, orientation, scriptDuration, targetAudience, audienceProblem, callToAction]);
 
-  const handleThreadSelect = useCallback((thread: Thread) => {
-    setSelectedThread(thread);
-    generateScript(thread);
+  const handleIdeaSelect = useCallback((idea: Idea) => {
+    setSelectedIdea(idea);
+    generateScript(idea);
   }, [generateScript]);
 
-  const handleCustomThreadSubmit = useCallback(() => {
-    if (!customThread.trim()) {
-      setScriptError('Please enter a custom thread');
+  const handleCustomIdeaSubmit = useCallback(() => {
+    if (!customIdea.trim()) {
+      setScriptError('Please enter a custom idea');
       return;
     }
-    generateScript(customThread);
-  }, [customThread, generateScript]);
+    generateScript(customIdea);
+  }, [customIdea, generateScript]);
 
   const generateVideoFromScript = useCallback(() => {
     if (typeof window !== 'undefined') {
@@ -162,30 +176,37 @@ export function useScriptGeneration() {
     setCompanyType,
     productDescription,
     setProductDescription,
-    customThread,
-    setCustomThread,
+    customIdea,
+    setCustomIdea,
     scriptQuality,
     setScriptQuality,
     orientation,
     setOrientation,
     scriptDuration,
     setScriptDuration,
-    threads,
-    selectedThread,
+    ideas,
+    selectedIdea,
     generatedScript,
-    loadingThreads,
+    loadingIdeas,
     loadingScript,
     scriptError,
+    // Advanced options
+    showAdvanced,
+    setShowAdvanced,
+    targetAudience,
+    setTargetAudience,
+    audienceProblem,
+    setAudienceProblem,
+    callToAction,
+    setCallToAction,
     // Costs
-    threadsCost,
+    ideasCost,
     scriptCost,
     // Functions
-    generateThreads,
+    generateIdeas,
     generateScript,
-    handleThreadSelect,
-    handleCustomThreadSubmit,
+    handleIdeaSelect,
+    handleCustomIdeaSubmit,
     generateVideoFromScript,
   };
 }
-
-

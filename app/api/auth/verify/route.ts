@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifySignature } from '@/lib/siws';
 import { createSession } from '@/lib/session';
+import { withRateLimit, RATE_LIMITS } from '@/lib/rateLimit';
 
-export async function POST(req: NextRequest) {
+async function handler(req: NextRequest) {
   try {
     const { walletAddress, signature, nonce } = await req.json();
     if (!walletAddress || !signature || !nonce) {
@@ -42,5 +43,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e.message || 'failed' }, { status: 500 });
   }
 }
+
+export const POST = withRateLimit(handler, RATE_LIMITS.auth);
 
 

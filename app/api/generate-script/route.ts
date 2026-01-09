@@ -8,13 +8,27 @@ const QUALITY_MODEL_MAP: Record<string, string> = {
   'high': 'gpt-5',
 };
 
-export const POST = withCreditGuard<{ quality?: string; companyName?: string; companyType?: string; product?: string; thread?: string; orientation?: string; duration?: string }>({
+interface ScriptRequestBody {
+  quality?: string;
+  companyName?: string;
+  companyType?: string;
+  product?: string;
+  thread?: string;
+  orientation?: string;
+  duration?: string;
+  // Advanced options
+  targetAudience?: string;
+  audienceProblem?: string;
+  callToAction?: string;
+}
+
+export const POST = withCreditGuard<ScriptRequestBody>({
   estimateUsdMicros: async ({ quality = 'mini' }) => {
     const model = QUALITY_MODEL_MAP[quality] || QUALITY_MODEL_MAP['mini'];
     // Conservative estimate with buffer for reasoning tokens
     return estimateChatUsdMicros(model, 2000, 3500);  // Increased buffer
   },
-  runWithUsageUsdMicros: async ({ companyName, companyType, product, thread, quality = 'mini', orientation = 'horizontal', duration = '12' }, _req, _context) => {
+  runWithUsageUsdMicros: async ({ companyName, companyType, product, thread, quality = 'mini', orientation = 'horizontal', duration = '12', targetAudience, audienceProblem, callToAction }, _req, _context) => {
 
     if (!companyName || !companyType || !thread) {
       const res = NextResponse.json(
@@ -33,7 +47,14 @@ export const POST = withCreditGuard<{ quality?: string; companyName?: string; co
       ? 'Vertical/portrait framing with subjects centered. Optimize for mobile viewing with close-up shots and minimal horizontal movement.'
       : 'Horizontal/landscape framing with wider shots. Utilize full width for cinematic compositions and dynamic camera movements.';
 
-    console.log('Generating script for:', { companyName, companyType, product, thread, quality, model, orientation, duration });
+    // Build advanced context if provided
+    const advancedContext = [
+      targetAudience ? `Target Audience: ${targetAudience}` : '',
+      audienceProblem ? `Problem/Pain Point: ${audienceProblem}` : '',
+      callToAction ? `Desired CTA: ${callToAction}` : '',
+    ].filter(Boolean).join('\n');
+
+    console.log('Generating script for:', { companyName, companyType, product, thread, quality, model, orientation, duration, targetAudience, audienceProblem, callToAction });
 
     const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
     const durationSeconds = parseInt(duration ?? '4', 10) || 4;
@@ -55,7 +76,7 @@ export const POST = withCreditGuard<{ quality?: string; companyName?: string; co
 
 Project Context
 Company: ${companyName}
-Type: ${companyType}${product ? `\nProduct Details: ${product}` : ''}
+Type: ${companyType}${product ? `\nProduct Details: ${product}` : ''}${advancedContext ? `\n${advancedContext}` : ''}
 Creative Thread Summary: ${thread}
 Video Orientation & Framing Notes: ${frameComposition}
 Duration: ${duration} seconds
@@ -147,7 +168,7 @@ Dialogue:
 Background sound:
 - Describe ambience or foley texture.
 On-screen text / CTA:
-- Provide text or write "None".
+- ${callToAction ? `Include the CTA: "${callToAction}" or a variation that fits the scene.` : 'Provide text or write "None".'}
 
 Master Prompt (paste into Sora):
 """
